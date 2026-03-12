@@ -8,8 +8,6 @@ mod models;
 mod router;
 mod schema;
 
-use tracing_subscriber;
-
 #[tokio::main]
 async fn main() {
     // Initialize tracing

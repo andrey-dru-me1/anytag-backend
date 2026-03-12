@@ -16,6 +16,9 @@ jobs:
   test-nix:
     name: Test with Nix (Linux)
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     services:
       postgres:
@@ -78,8 +81,11 @@ jobs:
   build-nix:
     name: Build with Nix
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     needs: [test-nix]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
 
     steps:
       - name: Checkout code

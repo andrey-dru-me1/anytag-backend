@@ -12,7 +12,6 @@ env:
   DATABASE_URL: postgres://postgres@localhost:5432/anytag_test
 
 jobs:
-  # Test with Nix on Linux (most reproducible)
   test-nix:
     name: Test with Nix (Linux)
     runs-on: ubuntu-latest
@@ -24,7 +23,7 @@ jobs:
       postgres:
         image: postgres:18.3-alpine3.23
         env:
-          POSTGRES_HOST_AUTH_METHOD: trust  # No password for local connections
+          POSTGRES_HOST_AUTH_METHOD: trust
           POSTGRES_USER: postgres
           POSTGRES_DB: anytag_test
         options: >-

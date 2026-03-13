@@ -50,7 +50,9 @@ If not using Nix:
 1. Install Rust via [rustup](https://rustup.rs/)
 2. Install diesel-cli: `cargo install diesel_cli --no-default-features --features postgres`
 3. Install PostgreSQL development libraries for your platform
-4. Follow steps 2-3 above
+4. Copy environment configuration: `cp .env.example .env`
+5. Start the database: `docker-compose up -d db`
+6. Setup database with migrations: `diesel database setup`
 
 ### 4. Build and Run
 

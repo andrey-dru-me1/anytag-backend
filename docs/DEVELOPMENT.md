@@ -38,12 +38,17 @@ sudo apt-get install direnv
 
 # Hook direnv into your shell (follow post-install instructions)
 
+# Copy the direnv example to create your local .envrc
+cp .envrc.example .envrc
+
 # Allow direnv in this project
 cd anytag-backend
 direnv allow
 ```
 
 Now the environment loads automatically whenever you enter the project directory!
+
+**Note:** `.envrc` is in `.gitignore` to keep local configurations out of version control. The template file `.envrc.template` contains the base configuration that should be copied to `.envrc` for local use.
 
 ## Development Workflow
 

@@ -1,0 +1,17 @@
+{
+  "recommendations": [
+    // === Main Extensions ===
+    "vadimcn.vscode-lldb",      // Rust debugging support
+    "fill-labs.dependi",        // Dependency visualization (optional)
+    "mkhl.direnv",              // Environment management with direnv (optional)
+    "docker.docker",            // Docker container management
+    "tamasfe.even-better-toml", // Enhanced TOML support for Cargo.toml, diesel.toml
+    "jnoortheen.nix-ide",       // Nix language support for flake.nix
+    "rust-lang.rust-analyzer",  // Rust language server
+
+    // === Optional Extensions ===
+    "fill-labs.dependi",        // Visualizes dependency graphs
+    "mkhl.direnv",              // Manages environment variables
+    "redhat.vscode-yaml"        // Provides YAML validation and formatting
+  ]
+}

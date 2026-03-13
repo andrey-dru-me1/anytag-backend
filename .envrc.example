@@ -1,35 +1,18 @@
-# ============================================================================
-# direnv configuration template for anytag-backend
-# ============================================================================
+# direnv configuration for anytag-backend
 #
-# This is a template file for direnv configuration.
-# To use direnv for automatic environment loading:
-#
-# 1. Copy this template to .envrc:
-#    cp .envrc.template .envrc
-#
-# 2. Allow direnv to load it:
-#    direnv allow
-#
-# 3. The environment will automatically load when you cd into the project
-#
-# Note: .envrc is in .gitignore to keep local configurations out of version control
-# ============================================================================
+# Copy to .envrc and run 'direnv allow'
+# See docs/DEVELOPMENT.md for detailed setup instructions
 
-# Automatic Nix environment loading with direnv
-# This file tells direnv to use the Nix shell defined in flake.nix
-
-# Use flake.nix (modern Nix)
+# Load Nix environment from flake.nix
 use flake
 
-# Optional: Load .env file if it exists
+# Load .env file if present
 if [[ -f .env ]]; then
   dotenv .env
 fi
 
-# Optional: Set up shell prompt
+# Cleaner output
 export DIRENV_LOG_FORMAT=""
 
-# Show welcome message
+# Welcome message
 echo "🔧 anytag-backend environment loaded via direnv"
-echo "   Run 'direnv reload' if you modify shell.nix or flake.nix"

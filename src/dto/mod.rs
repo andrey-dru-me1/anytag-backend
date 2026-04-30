@@ -3,6 +3,8 @@
 
 mod posts;
 mod tags;
+mod users;
 
 pub use posts::*;
 pub use tags::*;
+pub use users::*;

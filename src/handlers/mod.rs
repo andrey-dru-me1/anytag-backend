@@ -4,7 +4,9 @@
 mod health;
 mod posts;
 mod tags;
+mod users;
 
 pub use health::*;
 pub use posts::*;
 pub use tags::*;
+pub use users::*;

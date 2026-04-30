@@ -14,6 +14,7 @@ mod user;
 
 pub use post::*;
 pub use tag::*;
+pub use user::*;
 
 #[cfg(test)]
 mod tests {

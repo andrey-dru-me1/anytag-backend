@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 This document outlines the Git workflow and conventions for the anytag-backend project. Following these guidelines ensures consistent collaboration, clean commit history, and efficient code review processes.
 
-> **YouTrack Integration**: All work must be linked to a YouTrack ticket. Every branch name, commit message, and pull request must include the corresponding ticket ID (e.g., `AT-1234`). The YouTrack instance is available at [https://youtrack.lightsoff.mooo.com](https://youtrack.lightsoff.mooo.com).
+> **YouTrack Integration**: All work must be linked to a YouTrack ticket. Every branch name, commit message, and pull request must include the corresponding ticket ID (e.g., `ANY-1234`). The YouTrack instance is available at [https://lightsoff.mooo.com/yt](https://lightsoff.mooo.com/yt).
 
 ## Branch Strategy
 
@@ -39,7 +39,7 @@ All development happens in feature branches branched from `develop`:
 Use lowercase with hyphens for separation. **Always include the YouTrack ticket ID** after the branch type prefix:
 
 ```txt
-feature/AT-1234-add-user-authentication
+feature/ANY-1234-add-user-authentication
 bugfix/AT-5678-fix-null-pointer-exception
 hotfix/AT-9012-critical-security-patch
 release/v1.2.0
@@ -59,7 +59,7 @@ release/v1.2.0
 <footer>
 ```
 
-> The ticket ID (e.g., `AT-1234`) must be placed in parentheses after the type.
+> The ticket ID (e.g., `ANY-1234`) must be placed in parentheses after the type.
 
 ### Types
 
@@ -81,7 +81,7 @@ release/v1.2.0
 ### Examples
 
 ```txt
-feat(AT-1234): Add user authentication middleware
+feat(ANY-1234): Add user authentication middleware
 fix(AT-5678): Resolve database connection timeout
 docs(AT-9012): Update API endpoint documentation
 refactor(AT-3456): Simplify error handling in handlers
@@ -96,7 +96,7 @@ refactor(AT-3456): Simplify error handling in handlers
 ### Footer (Optional)
 
 - Reference issues: `Closes #123`, `Fixes #456`
-- YouTrack ticket reference (if not already in subject): `See AT-1234`
+- YouTrack ticket reference (if not already in subject): `See ANY-1234`
 - Breaking changes: `BREAKING CHANGE: <description>`
 
 ## Pull Request Workflow
@@ -115,7 +115,7 @@ refactor(AT-3456): Simplify error handling in handlers
 
    ```bash
    git add .
-   git commit -m "feat(AT-1234): Add new endpoint for user profiles"
+   git commit -m "feat(ANY-1234): Add new endpoint for user profiles"
    ```
 
 3. **Push to remote**:
@@ -132,7 +132,7 @@ refactor(AT-3456): Simplify error handling in handlers
 ### PR Title Format
 
 ```txt
-[Type] AT-1234: Brief description of changes
+[Type] ANY-1234: Brief description of changes
 ```
 
 > The YouTrack ticket ID must be included after the type, separated by a colon.
@@ -140,7 +140,7 @@ refactor(AT-3456): Simplify error handling in handlers
 Examples:
 
 ```txt
-[Feature] AT-1234: Add user authentication
+[Feature] ANY-1234: Add user authentication
 [Bugfix] AT-5678: Resolve memory leak in database pool
 [Refactor] AT-3456: Simplify error handling middleware
 ```
@@ -164,7 +164,7 @@ Brief description of the changes.
 ## Related Issues
 Closes #123
 Fixes #456
-AT-1234
+ANY-1234
 
 ## Checklist
 - [ ] Code follows project style guidelines
@@ -227,14 +227,14 @@ git checkout develop
 git pull origin develop
 
 # Create feature branch with ticket ID
-git checkout -b feature/AT-1234-feature-description
+git checkout -b feature/ANY-1234-feature-description
 
 # Make changes and commit
 git add .
-git commit -m "feat(AT-1234): Add feature description"
+git commit -m "feat(ANY-1234): Add feature description"
 
 # Push to remote
-git push -u origin feature/AT-1234-feature-description
+git push -u origin feature/ANY-1234-feature-description
 ```
 
 ### Updating Feature Branch with Latest Develop

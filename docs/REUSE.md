@@ -9,13 +9,22 @@ This project follows the [REUSE Specification](https://reuse.software/) to stand
 
 ## License
 
-The project is licensed under **AGPL-3.0-only**. See [`LICENSE`](LICENSE) for the full license text and [`LICENSES/AGPL-3.0-only.txt`](LICENSES/AGPL-3.0-only.txt) for the REUSE-compliant copy.
+The project is licensed under **AGPL-3.0-only**. See [`LICENSE`](LICENSE) (symlinked to [`LICENSES/AGPL-3.0-only.txt`](LICENSES/AGPL-3.0-only.txt)) for the full license text.
 
 ## REUSE Configuration
 
-- [`REUSE.toml`](REUSE.toml) — central configuration that bulk-annotates files unable to carry inline SPDX headers (e.g., [`Cargo.lock`](Cargo.lock), [`flake.lock`](flake.lock), generated [`src/schema.rs`](src/schema.rs), VS Code settings)
+- [`REUSE.toml`](REUSE.toml) — central configuration that bulk-annotates files unable to carry inline SPDX headers
 - [`LICENSES/`](LICENSES/) — directory containing the full text of every license used in the project
 - Individual source files carry inline SPDX headers at the top
+
+### When to use `REUSE.toml` vs. inline headers
+
+| Approach                    | When to use                                                                          | Examples                                                      |
+| --------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| **Inline SPDX header**      | Source files you create and edit                                                     | `.rs`, `.md`, `.sh`, `.sql`, `.toml`, `.yml`                  |
+| **`REUSE.toml` annotation** | Auto-generated files, lock files, or files where inline comments would break tooling | `Cargo.lock`, `flake.lock`, `src/schema.rs`, `.vscode/*.json` |
+
+If a file is auto-generated (e.g., by Diesel or `cargo`), add it to [`REUSE.toml`](REUSE.toml) instead of inserting an inline header — the header would be overwritten on regeneration.
 
 ## Adding a New File
 

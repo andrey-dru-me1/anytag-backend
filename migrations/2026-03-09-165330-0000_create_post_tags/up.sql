@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+-- SPDX-License-Identifier: AGPL-3.0-only
+
 CREATE TABLE post_tags (
     post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,

@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+SPDX-License-Identifier: AGPL-3.0-only
+-->
+
 # Development Guide for anytag-backend
 
 ## Quick Start
@@ -96,6 +101,9 @@ cargo test test_name
 
 # Build for release
 cargo build --release
+
+# Annotate new files with SPDX headers (see REUSE Compliance)
+reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" <file>
 ```
 
 ## Project Structure
@@ -154,112 +162,12 @@ The following environment variables are used:
 
 See [WINDOWS.md](./WINDOWS.md) for detailed Windows/WSL2 setup.
 
-## Troubleshooting
-
-### Nix Issues
-
-```bash
-# Clear Nix cache if builds fail
-nix-store --verify --check-contents
-
-# Update Nix channels
-nix-channel --update
-
-# Enter shell with pure isolation
-nix develop --pure
-```
-
-### Database Issues
-
-```bash
-# Check if database is running
-docker-compose ps
-
-# View database logs
-docker-compose logs db
-
-# Reset database (destructive!)
-docker-compose down -v
-docker-compose up -d db
-diesel migration run
-```
-
-### Rust/Diesel Issues
-
-```bash
-# Clean and rebuild
-cargo clean
-cargo build
-
-# Update dependencies
-cargo update
-
-# Check diesel connection
-diesel database reset
-```
-
-## IDE Integration
-
-### VS Code
-
-Recommended extensions for Rust development with Nix:
-
-- **rust-analyzer** – Rust language support
-- **CodeLLDB** – Debugging support
-- **Nix IDE** – Nix language support - syntax highlighting, formatting, and error reporting
-- **direnv** – Automatic environment loading
-- **DockerDX** – Docker integration
-- **Even Better TOML** – TOML file support
-- **YAML** – YAML file support
-
-Open the project - VS Code should detect the Nix environment automatically.
-
-### Zed
-
-Zed has built-in Rust support via rust-analyzer. For Nix development:
-
-1. Install the **nix** extension from the extensions panel
-2. Open the project - Zed will detect the Nix environment
-3. Enable **direnv** support in settings if using direnv
-
-### IntelliJ/CLion
-
-1. Install "Rust" plugin
-2. Open project - may need to configure custom toolchain
-3. Set environment variables in run configurations
-
-## Adding New Dependencies
-
-### Rust Dependencies
-
-Edit `Cargo.toml` and run:
-
-```bash
-cargo build  # Updates Cargo.lock
-```
-
-### Nix Dependencies
-
-Edit `flake.nix` and re-enter shell:
-
-```bash
-nix develop
-```
-
-If you're using direnv, reload the environment after editing `flake.nix`:
-
-```bash
-direnv reload
-```
-
 ## CI/CD
 
-The project includes GitHub Actions workflow (`.github/workflows/ci.yml`) that:
+The project includes two GitHub Actions workflows that run on every push and pull request to `master` and `develop`:
 
-1. Tests on Ubuntu, macOS, and Windows
-2. Runs all migrations
-3. Builds and tests the project
-4. Checks formatting and linting
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml) — Builds, tests, lints, and checks formatting
+- [`.github/workflows/reuse.yml`](.github/workflows/reuse.yml) — REUSE compliance check
 
 ## Contributing
 
@@ -269,9 +177,11 @@ The project includes GitHub Actions workflow (`.github/workflows/ci.yml`) that:
 4. Update documentation if needed
 5. Create pull request
 
-## Need Help?
+## See Also
 
-- Check the [WINDOWS.md](./WINDOWS.md) for Windows-specific issues
-- Review Nix documentation: <https://nixos.org/learn/>
-- Diesel documentation: <https://diesel.rs/guides/>
-- Create an issue in the repository
+- [Troubleshooting](./TROUBLESHOOTING.md) — Common issues and solutions
+- [Dependency Management](./DEPENDENCIES.md) — Adding and updating Rust and Nix dependencies
+- [IDE Setup](./IDE_SETUP.md) — VS Code, Zed, and IntelliJ/CLion configuration
+- [REUSE Compliance](./REUSE.md) — License management and SPDX headers
+- [Git Workflow](./GIT_WORKFLOW.md) — Branch strategy, commit conventions, and PR guidelines
+- [Windows Setup](./WINDOWS.md) — Windows-specific development setup with WSL2

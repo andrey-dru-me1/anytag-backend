@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 ---
 name: CI
 
@@ -36,7 +39,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@v3.17.0
@@ -88,7 +91,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
 
       - name: Install Nix
         uses: DeterminateSystems/determinate-nix-action@v3.17.0

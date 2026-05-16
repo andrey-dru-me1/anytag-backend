@@ -12,10 +12,10 @@
 
   outputs =
     {
-      self,
       nixpkgs,
       flake-utils,
       rust-overlay,
+      ...
     }:
     flake-utils.lib.eachDefaultSystem (
       system:
@@ -43,11 +43,11 @@
             postgresql_18
             nil
             git
-            docker-compose
             just
             nixfmt-rfc-style
             openssl
             pkg-config
+            nixd
             reuse
           ];
 
@@ -77,10 +77,10 @@
             echo "📦 Tools:"
             echo "  Rust: $(rustc --version | cut -d' ' -f2)"
             echo "  Cargo: $(cargo --version | cut -d' ' -f2)"
-            echo "  Diesel: $(diesel --version | cut -d' ' -f2)"
+            echo "  Diesel: $(diesel -V | cut -d' ' -f2)"
             echo ""
             echo "🚀 Quick start:"
-            echo "  1. docker-compose up -d db"
+            echo "  1. docker compose up -d db"
             echo "  2. diesel migration run"
             echo "  3. cargo build"
             echo "========================================"

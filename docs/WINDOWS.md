@@ -104,7 +104,7 @@ source ~/.bashrc
 ```bash
 # Test Docker integration
 docker --version
-docker-compose --version
+docker compose --version
 
 # If not working, ensure Docker Desktop WSL2 integration is enabled
 ```
@@ -165,7 +165,7 @@ sudo apt install nix
 
 ```bash
 # Check if database is running
-docker-compose ps
+docker compose ps
 
 # Check Docker Desktop is running on Windows
 # WSL2 Docker connects to Windows Docker Desktop
@@ -239,15 +239,15 @@ diesel --version
 
 # 4. Check Docker
 docker --version
-docker-compose --version
+docker compose --version
 
 # 5. Start environment
 nix develop
 # Should see welcome message with all tools listed
 
 # 6. Test database
-docker-compose up -d db
-docker-compose ps  # Should show db running
+docker compose up -d db
+docker compose ps  # Should show db running
 
 # 7. Test migrations
 diesel migration run

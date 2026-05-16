@@ -42,7 +42,7 @@ nix develop
 cp .env.example .env
 
 # Start the database
-docker-compose up -d db
+docker compose up -d db
 
 # Setup database with migrations
 diesel database setup
@@ -56,7 +56,7 @@ If not using Nix:
 2. Install diesel-cli: `cargo install diesel_cli --no-default-features --features postgres`
 3. Install PostgreSQL development libraries for your platform
 4. Copy environment configuration: `cp .env.example .env`
-5. Start the database: `docker-compose up -d db`
+5. Start the database: `docker compose up -d db`
 6. Setup database with migrations: `diesel database setup`
 
 ### 4. Build and Run
@@ -103,8 +103,8 @@ diesel migration revert # Revert last migration
 diesel migration list   # List all migrations
 
 # Docker
-docker-compose up -d db    # Start database
-docker-compose down -v     # Stop and remove database with volumes
+docker compose up -d db    # Start database
+docker compose down -v     # Stop and remove database with volumes
 ```
 
 ## Documentation

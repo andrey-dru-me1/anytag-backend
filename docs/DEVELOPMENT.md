@@ -60,7 +60,7 @@ Now the environment loads automatically whenever you enter the project directory
 ### 1. Start the Database
 
 ```bash
-docker-compose up -d db
+docker compose up -d db
 ```
 
 ### 2. Run Database Migrations

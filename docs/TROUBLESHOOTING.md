@@ -22,14 +22,14 @@ nix develop --pure
 
 ```bash
 # Check if database is running
-docker-compose ps
+docker compose ps
 
 # View database logs
-docker-compose logs db
+docker compose logs db
 
 # Reset database (destructive!)
-docker-compose down -v
-docker-compose up -d db
+docker compose down -v
+docker compose up -d db
 diesel migration run
 ```
 

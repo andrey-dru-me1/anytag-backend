@@ -32,6 +32,7 @@ All development happens in feature branches branched from `develop`:
 - **Feature branches** (`feature/*`) - New functionality
 - **Bugfix branches** (`bugfix/*`) - Bug fixes for upcoming release
 - **Hotfix branches** (`hotfix/*`) - Critical production fixes (branched from `master`)
+- **Chore branches** (`chore/*`) - Documentation or maintenance changes
 - **Release branches** (`release/*`) - Release preparation (branched from `develop`)
 
 ## Branch Naming Conventions
@@ -40,12 +41,13 @@ Use lowercase with hyphens for separation. **Always include the YouTrack ticket 
 
 ```txt
 feature/ANY-1234-add-user-authentication
-bugfix/AT-5678-fix-null-pointer-exception
-hotfix/AT-9012-critical-security-patch
+bugfix/ANY-5678-fix-null-pointer-exception
+hotfix/ANY-9012-critical-security-patch
+chore/update-cargo-deps
 release/v1.2.0
 ```
 
-> Release branches do not require a ticket ID.
+> Release and small chore branches do not require a ticket ID.
 
 ## Commit Message Guidelines
 

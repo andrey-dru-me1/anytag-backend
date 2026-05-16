@@ -134,7 +134,7 @@ refactor(AT-3456): Simplify error handling in handlers
 ### PR Title Format
 
 ```txt
-[Type] ANY-1234: Brief description of changes
+[Type] TICKET-ID: Brief description of changes
 ```
 
 > The YouTrack ticket ID must be included after the type, separated by a colon.
@@ -151,24 +151,28 @@ Examples:
 
 ```markdown
 ## Description
+
 Brief description of the changes.
 
 ## Changes Made
+
 - Change 1
 - Change 2
 - Change 3
 
 ## Testing
+
 - [ ] Unit tests added/updated
 - [ ] Integration tests pass
 - [ ] Manual testing performed
 
 ## Related Issues
-Closes #123
-Fixes #456
-ANY-1234
+
+Closes ANY-123
+Fixes ANY-456
 
 ## Checklist
+
 - [ ] Code follows project style guidelines
 - [ ] Self-review completed
 - [ ] Documentation updated if needed

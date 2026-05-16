@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 The Anytag Backend Authors
+
 # direnv configuration for anytag-backend
 #
 # Copy to .envrc and run 'direnv allow'

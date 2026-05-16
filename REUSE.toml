@@ -1,0 +1,8 @@
+version = 1
+SPDX-PackageName = "Anytag Backend"
+
+[[annotations]]
+path = ["Cargo.lock", "flake.lock", ".vscode/**.json", "src/schema.rs"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Anytag Backend Authors"
+SPDX-License-Identifier = "AGPL-3.0-only"

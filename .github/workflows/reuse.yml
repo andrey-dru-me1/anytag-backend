@@ -1,0 +1,20 @@
+# SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+# SPDX-License-Identifier: AGPL-3.0-only
+---
+name: License Compliance
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  check-license:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Use an official REUSE action
+      - name: REUSE Compliance Check
+        uses: fsfe/reuse-action@v6

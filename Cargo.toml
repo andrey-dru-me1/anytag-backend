@@ -1,7 +1,12 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Copyright (C) 2026 The Anytag Backend Authors
+
 [package]
 name = "anytag-backend"
 version = "0.1.0"
 edition = "2024"
+license = "AGPL-3.0-only"
+license-file = "LICENSE"
 
 [dependencies]
 diesel = { version = "2.3.6", features = ["postgres", "r2d2", "chrono"] }

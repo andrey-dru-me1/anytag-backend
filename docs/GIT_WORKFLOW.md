@@ -1,6 +1,13 @@
+<!--
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+SPDX-License-Identifier: AGPL-3.0-only
+-->
+
 # Git Workflow Guide
 
 This document outlines the Git workflow and conventions for the anytag-backend project. Following these guidelines ensures consistent collaboration, clean commit history, and efficient code review processes.
+
+> **YouTrack Integration**: All work must be linked to a YouTrack ticket. Every branch name, commit message, and pull request must include the corresponding ticket ID (e.g., `ANY-1234`). The YouTrack instance is available at [https://lightsoff.mooo.com/yt](https://lightsoff.mooo.com/yt).
 
 ## Branch Strategy
 
@@ -25,30 +32,36 @@ All development happens in feature branches branched from `develop`:
 - **Feature branches** (`feature/*`) - New functionality
 - **Bugfix branches** (`bugfix/*`) - Bug fixes for upcoming release
 - **Hotfix branches** (`hotfix/*`) - Critical production fixes (branched from `master`)
+- **Chore branches** (`chore/*`) - Documentation or maintenance changes
 - **Release branches** (`release/*`) - Release preparation (branched from `develop`)
 
 ## Branch Naming Conventions
 
-Use lowercase with hyphens for separation:
+Use lowercase with hyphens for separation. **Always include the YouTrack ticket ID** after the branch type prefix:
 
 ```txt
-feature/add-user-authentication
-bugfix/fix-null-pointer-exception
-hotfix/critical-security-patch
+feature/ANY-1234-add-user-authentication
+bugfix/ANY-5678-fix-null-pointer-exception
+hotfix/ANY-9012-critical-security-patch
+chore/update-cargo-deps
 release/v1.2.0
 ```
+
+> Release and small chore branches do not require a ticket ID.
 
 ## Commit Message Guidelines
 
 ### Format
 
 ```txt
-<type>: <subject>
+<type>(<ticket-id>): <subject>
 
 <body>
 
 <footer>
 ```
+
+> The ticket ID (e.g., `ANY-1234`) must be placed in parentheses after the type.
 
 ### Types
 
@@ -70,10 +83,10 @@ release/v1.2.0
 ### Examples
 
 ```txt
-feat: Add user authentication middleware
-fix: Resolve database connection timeout
-docs: Update API endpoint documentation
-refactor: Simplify error handling in handlers
+feat(ANY-1234): Add user authentication middleware
+fix(AT-5678): Resolve database connection timeout
+docs(AT-9012): Update API endpoint documentation
+refactor(AT-3456): Simplify error handling in handlers
 ```
 
 ### Body (Optional)
@@ -85,6 +98,7 @@ refactor: Simplify error handling in handlers
 ### Footer (Optional)
 
 - Reference issues: `Closes #123`, `Fixes #456`
+- YouTrack ticket reference (if not already in subject): `See ANY-1234`
 - Breaking changes: `BREAKING CHANGE: <description>`
 
 ## Pull Request Workflow
@@ -103,7 +117,7 @@ refactor: Simplify error handling in handlers
 
    ```bash
    git add .
-   git commit -m "feat: Add new endpoint for user profiles"
+   git commit -m "feat(ANY-1234): Add new endpoint for user profiles"
    ```
 
 3. **Push to remote**:
@@ -120,15 +134,17 @@ refactor: Simplify error handling in handlers
 ### PR Title Format
 
 ```txt
-[Type] Brief description of changes
+[Type] ANY-1234: Brief description of changes
 ```
+
+> The YouTrack ticket ID must be included after the type, separated by a colon.
 
 Examples:
 
 ```txt
-[Feature] Add user authentication
-[Bugfix] Resolve memory leak in database pool
-[Refactor] Simplify error handling middleware
+[Feature] ANY-1234: Add user authentication
+[Bugfix] AT-5678: Resolve memory leak in database pool
+[Refactor] AT-3456: Simplify error handling middleware
 ```
 
 ### PR Description Template
@@ -150,6 +166,7 @@ Brief description of the changes.
 ## Related Issues
 Closes #123
 Fixes #456
+ANY-1234
 
 ## Checklist
 - [ ] Code follows project style guidelines
@@ -211,15 +228,15 @@ Fixes #456
 git checkout develop
 git pull origin develop
 
-# Create feature branch
-git checkout -b feature/feature-name
+# Create feature branch with ticket ID
+git checkout -b feature/ANY-1234-feature-description
 
 # Make changes and commit
 git add .
-git commit -m "feat: Add feature description"
+git commit -m "feat(ANY-1234): Add feature description"
 
 # Push to remote
-git push -u origin feature/feature-name
+git push -u origin feature/ANY-1234-feature-description
 ```
 
 ### Updating Feature Branch with Latest Develop
@@ -249,15 +266,15 @@ git push -f
 git checkout master
 git pull origin master
 
-# Create hotfix branch
-git checkout -b hotfix/issue-description
+# Create hotfix branch with ticket ID
+git checkout -b hotfix/AT-9012-critical-security-patch
 
 # Make urgent fix
 git add .
-git commit -m "fix: Critical security patch"
+git commit -m "fix(AT-9012): Critical security patch"
 
 # Push and create PR to master AND develop
-git push -u origin hotfix/issue-description
+git push -u origin hotfix/AT-9012-critical-security-patch
 ```
 
 ## Best Practices

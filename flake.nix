@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+# SPDX-License-Identifier: AGPL-3.0-only
+
 {
   description = "anytag-backend development environment";
 
@@ -45,6 +48,7 @@
             nixfmt-rfc-style
             openssl
             pkg-config
+            reuse
           ];
 
           env = {

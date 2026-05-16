@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+SPDX-License-Identifier: AGPL-3.0-only
+-->
+
 # Anytag Backend
 
 A Rust backend service for a social tagging application built with Diesel ORM and PostgreSQL.
@@ -37,7 +42,7 @@ nix develop
 cp .env.example .env
 
 # Start the database
-docker-compose up -d db
+docker compose up -d db
 
 # Setup database with migrations
 diesel database setup
@@ -51,7 +56,7 @@ If not using Nix:
 2. Install diesel-cli: `cargo install diesel_cli --no-default-features --features postgres`
 3. Install PostgreSQL development libraries for your platform
 4. Copy environment configuration: `cp .env.example .env`
-5. Start the database: `docker-compose up -d db`
+5. Start the database: `docker compose up -d db`
 6. Setup database with migrations: `diesel database setup`
 
 ### 4. Build and Run
@@ -98,15 +103,19 @@ diesel migration revert # Revert last migration
 diesel migration list   # List all migrations
 
 # Docker
-docker-compose up -d db    # Start database
-docker-compose down -v     # Stop and remove database with volumes
+docker compose up -d db    # Start database
+docker compose down -v     # Stop and remove database with volumes
 ```
 
 ## Documentation
 
 Detailed documentation is available in the `docs/` directory:
 
-- **[Development Guide](docs/DEVELOPMENT.md)** - Complete development workflow, troubleshooting, and advanced usage
+- **[Development Guide](docs/DEVELOPMENT.md)** - Development workflow, project structure, and environment setup
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and CI/CD overview
+- **[Dependency Management](docs/DEPENDENCIES.md)** - Adding and updating Rust and Nix dependencies
+- **[IDE Setup](docs/IDE_SETUP.md)** - VS Code, Zed, and IntelliJ/CLion configuration
+- **[REUSE Compliance](docs/REUSE.md)** - License management and SPDX headers
 - **[Git Workflow](docs/GIT_WORKFLOW.md)** - Branch strategy, commit conventions, and PR guidelines
 - **[Windows Setup](docs/WINDOWS.md)** - Windows-specific development setup with WSL2
 - **Database Schema** - See `migrations/` directory for SQL definitions
@@ -119,7 +128,7 @@ Common issues and solutions:
 - **"diesel command not found"**: Ensure you're inside the Nix shell (`nix develop`)
 - **"ld: library 'pq' not found"**: Install PostgreSQL development libraries for your platform
 
-For detailed troubleshooting, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+For detailed troubleshooting, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
 
 ## Contributing
 
@@ -145,6 +154,10 @@ See the [LICENSE](LICENSE) file for the full license text.
 - **Copyleft**: Modifications must be released under the same license
 - **Network Use**: Requires source code availability for network/server software
 - **Commercial Use**: Permitted with compliance to license terms
+
+### REUSE Compliance
+
+This project follows the [REUSE Specification](https://reuse.software/) for license and copyright annotations. All files include SPDX headers — see the [REUSE Compliance Guide](docs/REUSE.md) for details on adding headers and running the linter.
 
 For more details about the AGPLv3 license, visit:
 

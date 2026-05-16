@@ -6,13 +6,13 @@
 # Copy to .envrc and run 'direnv allow'
 # See docs/DEVELOPMENT.md for detailed setup instructions
 
-# Load Nix environment from flake.nix
-use flake
-
 # Load .env file if present
 if [[ -f .env ]]; then
   dotenv .env
 fi
+
+# Load Nix environment from flake.nix
+use flake
 
 # Cleaner output
 export DIRENV_LOG_FORMAT=""

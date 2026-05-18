@@ -206,22 +206,12 @@ Fixes ANY-456
 
 ## Merging Strategy
 
-### Squash and Merge
+We use the following merge strategies, listed in descending priority:
 
-- **When to use**: Feature branches with multiple commits
-- **Benefits**: Clean history, one commit per feature
-- **Commit message**: Use PR title as squash commit message
-
-### Merge Commit
-
-- **When to use**: When preserving individual commit history is important
-- **Benefits**: Full history preserved
-- **Use case**: Complex features with meaningful intermediate commits
-
-### Rebase and Merge
-
-- **When to use**: Simple branches, linear history preferred
-- **Benefits**: Linear history without merge commits
+- **Merge commit** — if there are no merge conflicts
+- **Merge commit with conflicts resolved on GitHub** — if resolving conflicts via the GitHub UI is convenient
+- **Local rebase, force push, then merge commit** — if resolving conflicts across the entire branch history is manageable
+- **Locally merge the target branch into the work branch, then merge commit** — otherwise
 
 ## Common Workflows
 

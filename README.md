@@ -5,6 +5,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 # Anytag Backend
 
+![logo](assets/main_logo.svg)
+
 A Rust backend service for a social tagging application built with Diesel ORM and PostgreSQL.
 
 ## Project Overview

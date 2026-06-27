@@ -8,7 +8,7 @@ modeSlugs:
   - ask
 ---
 <!--
-SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 
@@ -55,7 +55,7 @@ The type is **PascalCase** (capital first letter only), followed by the YouTrack
 [Bugfix] AT-5678: Resolve memory leak in database pool
 [Refactor] AT-3456: Simplify error handling middleware
 [Docs] ANY-9012: Update API endpoint documentation
-[Chore] ANY-7890: Upgrade dio to 5.4.0
+[Chore] ANY-7890: Update Rust toolchain to 1.84.0
 [Hotfix] ANY-3456: Patch CSRF vulnerability in auth endpoint
 [Release] v1.2.0
 ```

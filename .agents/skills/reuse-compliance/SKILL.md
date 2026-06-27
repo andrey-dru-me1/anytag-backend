@@ -6,7 +6,7 @@ modeSlugs:
   - debug
   - architect
 ---
-<!-- SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors -->
+<!-- SPDX-FileCopyrightText: 2026 The Anytag Backend Authors -->
 <!-- SPDX-License-Identifier: AGPL-3.0-only -->
 
 # REUSE Compliance Skill
@@ -22,50 +22,45 @@ This skill applies when creating a **new source file** or when an existing file 
 
 > EVERY source file MUST start with SPDX-FileCopyrightText and SPDX-License-Identifier comments. REUSE compliance is CI-checked.
 
-This rule is **not enforced by `flutter analyze` or the Dart linter** — it's a project convention that must be followed manually.
+This rule is **not enforced by `cargo check` or the Rust compiler** — it's a project convention that must be followed manually.
 
 ## Header Format by File Type
 
 | File type             | Comment style | Header template                                                                                                         |
 | --------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| Dart (`.dart`)        | `//`          | `// SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `// SPDX-License-Identifier: AGPL-3.0-only`             |
-| Markdown (`.md`)      | `<!-- -->`    | `<!-- SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors -->` + `<!-- SPDX-License-Identifier: AGPL-3.0-only -->` |
-| Shell (`.sh`)         | `#`           | `# SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `# SPDX-License-Identifier: AGPL-3.0-only`               |
-| YAML (`.yml`/`.yaml`) | `#`           | `# SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `# SPDX-License-Identifier: AGPL-3.0-only`               |
-| TOML (`.toml`)        | `#`           | `# SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `# SPDX-License-Identifier: AGPL-3.0-only`               |
-| PowerShell (`.ps1`)   | `#`           | `# SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `# SPDX-License-Identifier: AGPL-3.0-only`               |
-| Kotlin (`.kt`)        | `//`          | `// SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `// SPDX-License-Identifier: AGPL-3.0-only`             |
-| Swift (`.swift`)      | `//`          | `// SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `// SPDX-License-Identifier: AGPL-3.0-only`             |
-| CMake (`.cmake`)      | `#`           | `# SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `# SPDX-License-Identifier: AGPL-3.0-only`               |
-| C++ (`.cpp`/`.h`)     | `//`          | `// SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `// SPDX-License-Identifier: AGPL-3.0-only`             |
-| C (`.c`)              | `//`          | `// SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `// SPDX-License-Identifier: AGPL-3.0-only`             |
-| Objective-C (`.m`)    | `//`          | `// SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors` + `// SPDX-License-Identifier: AGPL-3.0-only`             |
-| XML / Plist           | `<!-- -->`    | `<!-- SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors -->` + `<!-- SPDX-License-Identifier: AGPL-3.0-only -->` |
-## Using `reuse annotate` (Recommended)
+| Rust (`.rs`)          | `//`          | `// SPDX-FileCopyrightText: 2026 The Anytag Backend Authors` + `// SPDX-License-Identifier: AGPL-3.0-only`             |
+| Markdown (`.md`)      | `<!-- -->`    | `<!-- SPDX-FileCopyrightText: 2026 The Anytag Backend Authors -->` + `<!-- SPDX-License-Identifier: AGPL-3.0-only -->` |
+| Shell (`.sh`)         | `#`           | `# SPDX-FileCopyrightText: 2026 The Anytag Backend Authors` + `# SPDX-License-Identifier: AGPL-3.0-only`               |
+| YAML (`.yml`/`.yaml`) | `#`           | `# SPDX-FileCopyrightText: 2026 The Anytag Backend Authors` + `# SPDX-License-Identifier: AGPL-3.0-only`               |
+| TOML (`.toml`)        | `#`           | `# SPDX-FileCopyrightText: 2026 The Anytag Backend Authors` + `# SPDX-License-Identifier: AGPL-3.0-only`               |
+| Dockerfile            | `#`           | `# SPDX-FileCopyrightText: 2026 The Anytag Backend Authors` + `# SPDX-License-Identifier: AGPL-3.0-only`               |
+| C++ (`.cpp`/`.h`)     | `//`          | `// SPDX-FileCopyrightText: 2026 The Anytag Backend Authors` + `// SPDX-License-Identifier: AGPL-3.0-only`             |
+| C (`.c`)              | `//`          | `// SPDX-FileCopyrightText: 2026 The Anytag Backend Authors` + `// SPDX-License-Identifier: AGPL-3.0-only`             |
+| XML / Plist           | `<!-- -->`    | `<!-- SPDX-FileCopyrightText: 2026 The Anytag Backend Authors -->` + `<!-- SPDX-License-Identifier: AGPL-3.0-only -->` |
+## Using `reuse annotate` (Recommended) — Examples
 
-The project uses `reuse` tool via `uv`:
 
 ```bash
 # Single file
-uv run reuse annotate --license AGPL-3.0-only --copyright "The Anytag Frontend Authors" lib/screens/new_screen.dart
+reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" src/handlers/new_handler.rs
 
 # Multiple files with glob
-uv run reuse annotate --license AGPL-3.0-only --copyright "The Anytag Frontend Authors" lib/screens/*.dart
+reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" src/handlers/*.rs
 
 # Dry-run to preview
-uv run reuse annotate --license AGPL-3.0-only --copyright "The Anytag Frontend Authors" --dry-run lib/new_file.dart
+reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" --dry-run src/new_file.rs
 ```
 
 ## When NOT to Add Inline Headers
 
-For **auto-generated files** (e.g., `pubspec.lock`, `.vscode/*.json`, `.metadata`), add the annotation to [`REUSE.toml`](../../../REUSE.toml) instead of inserting inline headers — the header would be overwritten on regeneration.
+For **auto-generated files** (e.g., `Cargo.lock`, `.vscode/*.json`), add the annotation to [`REUSE.toml`](../../../REUSE.toml) instead of inserting inline headers — the header would be overwritten on regeneration.
 
 ## Verification
 
 Before committing, verify compliance:
 
 ```bash
-uv run reuse lint
+reuse lint
 ```
 
 Expected output: **"All files are compliant!"**
@@ -74,11 +69,11 @@ Expected output: **"All files are compliant!"**
 
 1. **Identify the file type** and determine the correct comment syntax.
 2. **Add the SPDX header** at the very top of the file (first 2 lines):
-   - Line 1: `SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors`
+   - Line 1: `SPDX-FileCopyrightText: 2026 The Anytag Backend Authors`
    - Line 2: `SPDX-License-Identifier: AGPL-3.0-only`
 3. **Use `reuse annotate`** for batch operations or if unsure about comment syntax.
 4. **For auto-generated files**, add to [`REUSE.toml`](../../../REUSE.toml) instead.
-5. **Run `uv run reuse lint`** to verify before pushing.
+5. **Run `reuse lint`** to verify before pushing.
 <!-- REUSE-IgnoreEnd -->
 
 ## See Also

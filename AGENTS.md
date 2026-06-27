@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+SPDX-License-Identifier: AGPL-3.0-only
+-->
+
 # AGENTS.md
 
 This file provides guidance to agents when working with code in this repository.

@@ -1,5 +1,5 @@
 <!--
-SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 
@@ -36,7 +36,7 @@ Formulate a pull request title and description following the project's PR conven
 Add SPDX license/copyright headers to new files to maintain REUSE compliance.
 
 - **When triggered**: Creating a new source file or fixing a missing SPDX header.
-- **Enforcement**: CI-checked but not enforced by `flutter analyze` — manual compliance required.
+- **Enforcement**: CI-checked but not enforced by `cargo check` — manual compliance required.
 - **See**: [`docs/REUSE.md`](../docs/REUSE.md)
 
 ---

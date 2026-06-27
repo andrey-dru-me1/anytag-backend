@@ -8,7 +8,7 @@ modeSlugs:
   - ask
 ---
 <!--
-SPDX-FileCopyrightText: 2026 The Anytag Frontend Authors
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 
@@ -70,7 +70,7 @@ feat(ANY-1234): Add user authentication middleware
 fix(ANY-5678): Resolve database connection timeout
 docs(ANY-9012): Update API endpoint documentation
 refactor(ANY-3456): Simplify error handling in handlers
-chore(ANY-7890): Upgrade dio to 5.4.0
+chore(ANY-7890): Update Rust toolchain to 1.84.0
 ```
 
 ## Step-by-Step

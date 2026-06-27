@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+SPDX-License-Identifier: AGPL-3.0-only
+-->
+
 # Architect Mode — Project Architecture Rules (Non-Obvious Only)
 
 - **Two error patterns coexist by design**: tuple `Result<_, (StatusCode, String)>` for simple read-only handlers, and structured `HandlerErr` with `ErrCode` enum for complex mutation handlers — new handlers should match the pattern of their domain (see [`src/handlers/mod.rs`](../../src/handlers/mod.rs:19))

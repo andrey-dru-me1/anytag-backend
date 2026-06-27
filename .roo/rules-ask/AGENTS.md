@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+SPDX-License-Identifier: AGPL-3.0-only
+-->
+
 # Ask Mode — Project Documentation Rules (Non-Obvious Only)
 
 - **Database URL is never hardcoded** — it's constructed from component env vars in the Nix shellHook (see [`flake.nix`](../../flake.nix:65)), not set directly in `.env`

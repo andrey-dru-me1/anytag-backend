@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+SPDX-License-Identifier: AGPL-3.0-only
+-->
+
 # Debug Mode — Project Debug Rules (Non-Obvious Only)
 
 - **Database port differs from default**: local PostgreSQL runs on **54321** (not 5432) — see [`docker-compose.yaml`](../../docker-compose.yaml:14)

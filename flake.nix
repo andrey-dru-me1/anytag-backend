@@ -49,6 +49,7 @@
             pkg-config
             nixd
             reuse
+            cargo-watch
           ];
 
           env = {
@@ -82,7 +83,7 @@
             echo "🚀 Quick start:"
             echo "  1. docker compose up -d db"
             echo "  2. diesel migration run"
-            echo "  3. cargo build"
+            echo "  3. cargo watch -x run   (hot-reload dev server)"
             echo "========================================"
           '';
         };

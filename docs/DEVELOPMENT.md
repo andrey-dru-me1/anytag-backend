@@ -75,13 +75,23 @@ diesel migration run
 cargo build
 ```
 
-### 4. Run Tests
+### 4. Run the Development Server (Hot Reload)
+
+```bash
+cargo watch -x run
+```
+
+The server restarts automatically whenever you change a source file —
+just save, then immediately test your endpoint with curl, httpie, or a
+REST client. No manual `cargo run` needed after every edit.
+
+### 5. Run Tests
 
 ```bash
 cargo test
 ```
 
-### 5. Common Development Tasks
+### 6. Common Development Tasks
 
 ```bash
 # Create new migration
@@ -98,6 +108,9 @@ cargo clippy
 
 # Run specific test
 cargo test test_name
+
+# Run tests automatically on file changes
+cargo watch -x test
 
 # Build for release
 cargo build --release

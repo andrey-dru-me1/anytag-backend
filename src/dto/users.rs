@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 The Anytag Backend Authors
 
-use serde::{Deserialize, Serialize};
 use crate::models::UserId;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]
 pub struct CreateUserRequest {

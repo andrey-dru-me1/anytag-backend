@@ -3,8 +3,8 @@
 
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use diesel::prelude::*;
-use zxcvbn::{Score, zxcvbn};
 use email_address::EmailAddress;
+use zxcvbn::{Score, zxcvbn};
 
 use crate::db::{DbPool, get_db_conn};
 use crate::dto::{CreateUserRequest, LoginRequest, LoginResponse, UserCreatedResponse};

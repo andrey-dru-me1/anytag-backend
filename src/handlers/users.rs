@@ -4,6 +4,7 @@
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use diesel::prelude::*;
 use zxcvbn::{Score, zxcvbn};
+use email_address::EmailAddress;
 
 use crate::db::{DbPool, get_db_conn};
 use crate::dto::{CreateUserRequest, LoginRequest, LoginResponse, UserCreatedResponse};
@@ -33,6 +34,15 @@ pub async fn create_user(
     State(pool): State<DbPool>,
     Json(payload): Json<CreateUserRequest>,
 ) -> Result<impl IntoResponse, HandlerErr> {
+    if !EmailAddress::is_valid(&payload.email) {
+        return Err(HandlerErr::builder()
+            .http_status(StatusCode::UNPROCESSABLE_ENTITY)
+            .code(ErrCode::InvalidEmail)
+            .context(format!("email format validation failed: '{}'", payload.email))
+            .message("Invalid email")
+            .build());
+    }
+
     let estimate = zxcvbn(&payload.password, &[&payload.name, &payload.email]);
     if estimate.score() < Score::Three {
         let mut message = "The password is weak.".to_string();

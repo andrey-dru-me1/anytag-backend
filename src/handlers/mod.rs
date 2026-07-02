@@ -24,6 +24,7 @@ pub enum ErrCode {
     DbQueryError,
     PasswordHashError,
     InvalidCredentials,
+    InvalidEmail,
 }
 
 #[derive(bon::Builder)]

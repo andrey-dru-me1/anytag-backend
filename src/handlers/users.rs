@@ -38,7 +38,7 @@ pub async fn create_user(
         return Err(HandlerErr::builder()
             .http_status(StatusCode::UNPROCESSABLE_ENTITY)
             .code(ErrCode::InvalidEmail)
-            .context(format!("email format validation failed"))
+            .context("email format validation failed")
             .message("Invalid email")
             .build());
     }

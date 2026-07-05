@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 The Anytag Backend Authors
 
-use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
+use axum::{Json, extract::State, http::HeaderMap, http::StatusCode, response::IntoResponse};
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use email_address::EmailAddress;
 use zxcvbn::{Score, zxcvbn};
 
 use crate::config::AppState;
-use crate::dto::{CreateUserRequest, LoginRequest, LoginResponse, UserCreatedResponse};
+use crate::dto::{
+    CreateUserRequest, CurrentUserResponse, LoginRequest, LoginResponse, LogoutRequest,
+    LogoutResponse, RefreshTokenRequest, TokenPairResponse, UserCreatedResponse,
+};
 use crate::handlers::{ApiError, ApiErrorCode};
+use crate::jwt::{
+    TokenType, create_access_token, create_refresh_token, hash_token, verify_token,
+};
 use crate::models::{NewUser, User};
 use crate::schema::users::dsl::*;
 
@@ -40,7 +46,39 @@ fn validate_email(input: &str) -> Result<(), ApiError> {
             .message("Invalid email")
             .build());
     }
+
     Ok(())
+}
+
+fn extract_bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
+    let auth_header = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .ok_or_else(|| {
+            ApiError::builder()
+                .http_status(StatusCode::UNAUTHORIZED)
+                .code(ApiErrorCode::InvalidToken)
+                .context("authorization header is missing")
+                .message("Missing authorization token")
+                .build()
+        })?;
+
+    let auth_header = auth_header.to_str().map_err(|e| {
+        ApiError::builder()
+            .http_status(StatusCode::UNAUTHORIZED)
+            .code(ApiErrorCode::InvalidToken)
+            .context(format!("authorization header is not valid UTF-8: {}", e))
+            .message("Invalid authorization token")
+            .build()
+    })?;
+
+    auth_header.strip_prefix("Bearer ").ok_or_else(|| {
+        ApiError::builder()
+            .http_status(StatusCode::UNAUTHORIZED)
+            .code(ApiErrorCode::InvalidToken)
+            .context("authorization header does not start with 'Bearer '")
+            .message("Invalid authorization token")
+            .build()
+    })
 }
 
 /// Validate password strength using zxcvbn.
@@ -141,9 +179,7 @@ pub async fn login_user(
             .build()
     })?;
 
-    let argon2 = Argon2::default();
-
-    argon2
+    Argon2::default()
         .verify_password(payload.password.as_bytes(), &parsed_hash)
         .map_err(|e| {
             err_builder
@@ -152,10 +188,220 @@ pub async fn login_user(
                 .build()
         })?;
 
+    let access_token = create_access_token(user.id).map_err(|e| {
+        ApiError::builder()
+            .http_status(StatusCode::INTERNAL_SERVER_ERROR)
+            .code(ApiErrorCode::JwtCreationError)
+            .context(format!("failed to create access token: {}", e))
+            .message("Failed to create access token")
+            .build()
+    })?;
+
+    let refresh_token = create_refresh_token(user.id).map_err(|e| {
+        ApiError::builder()
+            .http_status(StatusCode::INTERNAL_SERVER_ERROR)
+            .code(ApiErrorCode::JwtCreationError)
+            .context(format!("failed to create refresh token: {}", e))
+            .message("Failed to create refresh token")
+            .build()
+    })?;
+
+    let refresh_token_hash = hash_token(&refresh_token);
+    let refresh_expires_at =
+        chrono::Utc::now().naive_utc() + chrono::Duration::days(30);
+
+    diesel::insert_into(crate::schema::refresh_tokens::table)
+        .values(&crate::models::NewRefreshToken {
+            user_id: user.id,
+            token_hash: refresh_token_hash,
+            expires_at: refresh_expires_at,
+        })
+        .execute(&mut conn)
+        .await
+        .map_err(|e| {
+            (
+                ApiErrorCode::DbQueryError,
+                format!("failed to save refresh token: {}", e),
+            )
+        })?;
+
     Ok(Json(LoginResponse {
         message: "login successful".to_string(),
         user_id: user.id,
         email: user.email,
+        access_token,
+        refresh_token,
+        token_type: "Bearer".to_string(),
+    }))
+}
+
+pub async fn get_current_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, ApiError> {
+    let token = extract_bearer_token(&headers)?;
+
+    let claims = verify_token(token, TokenType::Access).map_err(|_| {
+        ApiError::builder()
+            .http_status(StatusCode::UNAUTHORIZED)
+            .code(ApiErrorCode::InvalidToken)
+            .context("access token verification failed")
+            .message("Invalid authorization token")
+            .build()
+    })?;
+
+    let mut conn = state.db_pool.get().await?;
+
+    let user = users
+        .find(claims.sub)
+        .first::<User>(&mut conn)
+        .await
+        .map_err(|e| {
+            ApiError::builder()
+                .http_status(StatusCode::UNAUTHORIZED)
+                .code(ApiErrorCode::InvalidToken)
+                .context(format!(
+                    "failed to find user from token subject '{}': {}",
+                    claims.sub, e
+                ))
+                .message("Invalid authorization token")
+                .build()
+        })?;
+
+    Ok(Json(CurrentUserResponse {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+    }))
+}
+
+pub async fn refresh_token(
+    State(state): State<AppState>,
+    Json(payload): Json<RefreshTokenRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let claims = verify_token(&payload.refresh_token, TokenType::Refresh).map_err(|_| {
+        ApiError::builder()
+            .http_status(StatusCode::UNAUTHORIZED)
+            .code(ApiErrorCode::InvalidToken)
+            .context("refresh token verification failed")
+            .message("Invalid refresh token")
+            .build()
+    })?;
+
+    let mut conn = state.db_pool.get().await?;
+    let refresh_token_hash = hash_token(&payload.refresh_token);
+
+    let stored_token = crate::schema::refresh_tokens::table
+        .filter(crate::schema::refresh_tokens::token_hash.eq(&refresh_token_hash))
+        .first::<crate::models::RefreshToken>(&mut conn)
+        .await
+        .map_err(|e| {
+            ApiError::builder()
+                .http_status(StatusCode::UNAUTHORIZED)
+                .code(ApiErrorCode::InvalidToken)
+                .context(format!("refresh token not found in database: {}", e))
+                .message("Invalid refresh token")
+                .build()
+        })?;
+
+    if stored_token.revoked_at.is_some() {
+        return Err(ApiError::builder()
+            .http_status(StatusCode::UNAUTHORIZED)
+            .code(ApiErrorCode::InvalidToken)
+            .context("refresh token is revoked")
+            .message("Invalid refresh token")
+            .build());
+    }
+
+    if stored_token.expires_at < chrono::Utc::now().naive_utc() {
+        return Err(ApiError::builder()
+            .http_status(StatusCode::UNAUTHORIZED)
+            .code(ApiErrorCode::InvalidToken)
+            .context("refresh token is expired in database")
+            .message("Invalid refresh token")
+            .build());
+    }
+
+    diesel::update(crate::schema::refresh_tokens::table.find(stored_token.id))
+        .set(crate::schema::refresh_tokens::revoked_at.eq(chrono::Utc::now().naive_utc()))
+        .execute(&mut conn)
+        .await
+        .map_err(|e| {
+            (
+                ApiErrorCode::DbQueryError,
+                format!("failed to revoke old refresh token: {}", e),
+            )
+        })?;
+
+    let access_token = create_access_token(claims.sub).map_err(|e| {
+        ApiError::builder()
+            .http_status(StatusCode::INTERNAL_SERVER_ERROR)
+            .code(ApiErrorCode::JwtCreationError)
+            .context(format!("failed to create access token: {}", e))
+            .message("Failed to create access token")
+            .build()
+    })?;
+
+    let refresh_token = create_refresh_token(claims.sub).map_err(|e| {
+        ApiError::builder()
+            .http_status(StatusCode::INTERNAL_SERVER_ERROR)
+            .code(ApiErrorCode::JwtCreationError)
+            .context(format!("failed to create refresh token: {}", e))
+            .message("Failed to create refresh token")
+            .build()
+    })?;
+
+    let refresh_token_hash = hash_token(&refresh_token);
+    let refresh_expires_at =
+        chrono::Utc::now().naive_utc() + chrono::Duration::days(30);
+
+    diesel::insert_into(crate::schema::refresh_tokens::table)
+        .values(&crate::models::NewRefreshToken {
+            user_id: claims.sub,
+            token_hash: refresh_token_hash,
+            expires_at: refresh_expires_at,
+        })
+        .execute(&mut conn)
+        .await
+        .map_err(|e| {
+            (
+                ApiErrorCode::DbQueryError,
+                format!("failed to save new refresh token: {}", e),
+            )
+        })?;
+
+    Ok(Json(TokenPairResponse {
+        access_token,
+        refresh_token,
+        token_type: "Bearer".to_string(),
+    }))
+}
+
+pub async fn logout_user(
+    State(state): State<AppState>,
+    Json(payload): Json<LogoutRequest>,
+) -> Result<impl IntoResponse, ApiError> {
+    let mut conn = state.db_pool.get().await?;
+
+    let refresh_token_hash = hash_token(&payload.refresh_token);
+
+    diesel::update(
+        crate::schema::refresh_tokens::table
+            .filter(crate::schema::refresh_tokens::token_hash.eq(refresh_token_hash))
+            .filter(crate::schema::refresh_tokens::revoked_at.is_null()),
+    )
+    .set(crate::schema::refresh_tokens::revoked_at.eq(chrono::Utc::now().naive_utc()))
+    .execute(&mut conn)
+    .await
+    .map_err(|e| {
+        (
+            ApiErrorCode::DbQueryError,
+            format!("failed to revoke refresh token on logout: {}", e),
+        )
+    })?;
+
+    Ok(Json(LogoutResponse {
+        message: "logout successful".to_string(),
     }))
 }
 

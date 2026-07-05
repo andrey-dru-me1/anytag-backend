@@ -28,6 +28,8 @@ pub enum ApiErrorCode {
     S3StorageError,
     ImageNotFound,
     ImageTooLarge,
+    JwtCreationError,
+    InvalidToken,
 }
 
 #[derive(bon::Builder, Debug)]

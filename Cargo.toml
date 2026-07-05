@@ -19,6 +19,12 @@ dotenv = "0.15"
 tracing = "0.1"
 tracing-subscriber = "0.3"
 anyhow = "1.0"
+argon2 = "0.5"
+rand_core = { version = "0.6", features = ["getrandom"] }
+zxcvbn = "3.1.1"
+strum = { version = "0.28.0", features = ["derive"] }
+bon = "3.9.3"
+email_address = "0.2.9"
 
 [dev-dependencies]
 tokio-test = "0.4"

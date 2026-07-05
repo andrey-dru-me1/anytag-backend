@@ -67,8 +67,8 @@ If not using Nix:
 # Build the project
 cargo build
 
-# Run the application
-cargo run
+# Run the development server with hot reload (restarts on file changes)
+cargo watch -x run
 
 # Run tests
 cargo test
@@ -98,6 +98,8 @@ cargo check          # Check for compilation errors
 cargo test           # Run tests
 cargo fmt           # Format code
 cargo clippy        # Lint code
+cargo watch -x run   # Development server with hot reload (restarts on save)
+cargo watch -x test  # Run tests automatically on file changes
 
 # Database
 diesel migration run    # Run pending migrations

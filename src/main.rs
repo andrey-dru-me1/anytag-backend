@@ -4,6 +4,7 @@
 mod db;
 mod dto;
 mod handlers;
+mod jwt;
 mod models;
 mod router;
 mod schema;

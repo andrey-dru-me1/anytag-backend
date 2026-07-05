@@ -16,7 +16,10 @@ pub fn create_router(pool: DbPool) -> Router {
         .route("/posts", get(handlers::list_posts))
         .route("/tags", get(handlers::list_tags))
         .route("/users", post(handlers::create_user))
-        .route("/auth/login", post(handlers::login_user));
+        .route("/auth/login", post(handlers::login_user))
+        .route("/users/me", get(handlers::get_current_user))
+        .route("/auth/refresh", post(handlers::refresh_token))
+        .route("/auth/logout", post(handlers::logout_user));
 
     Router::new().nest("/api/v1", api_v1).with_state(pool)
 }

@@ -25,6 +25,8 @@ pub enum ErrCode {
     PasswordHashError,
     InvalidCredentials,
     InvalidEmail,
+    JwtCreationError,
+    InvalidToken,
 }
 
 #[derive(bon::Builder)]

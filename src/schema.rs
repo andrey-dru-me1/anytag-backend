@@ -17,6 +17,17 @@ diesel::table! {
 }
 
 diesel::table! {
+    refresh_tokens (id) {
+        id -> Int4,
+        user_id -> Int4,
+        token_hash -> Text,
+        expires_at -> Timestamp,
+        revoked_at -> Nullable<Timestamp>,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     tag_user_visibility (tag_id, user_id) {
         tag_id -> Int4,
         user_id -> Int4,
@@ -60,6 +71,7 @@ diesel::table! {
 diesel::joinable!(post_tags -> posts (post_id));
 diesel::joinable!(post_tags -> tags (tag_id));
 diesel::joinable!(posts -> users (user_id));
+diesel::joinable!(refresh_tokens -> users (user_id));
 diesel::joinable!(tag_user_visibility -> tags (tag_id));
 diesel::joinable!(tag_user_visibility -> users (user_id));
 diesel::joinable!(tags -> users (user_id));
@@ -69,6 +81,7 @@ diesel::joinable!(user_tag_subscriptions -> users (user_id));
 diesel::allow_tables_to_appear_in_same_query!(
     post_tags,
     posts,
+    refresh_tokens,
     tag_user_visibility,
     tags,
     user_tag_subscriptions,

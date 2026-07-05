@@ -25,6 +25,8 @@ zxcvbn = "3.1.1"
 strum = { version = "0.28.0", features = ["derive"] }
 bon = "3.9.3"
 email_address = "0.2.9"
+jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
+sha2 = "0.11.0"
 
 [dev-dependencies]
 tokio-test = "0.4"

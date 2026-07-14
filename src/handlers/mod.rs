@@ -6,6 +6,7 @@ mod posts;
 mod tags;
 mod users;
 
+use diesel_async::pooled_connection::deadpool;
 pub use health::*;
 pub use posts::*;
 pub use tags::*;
@@ -37,16 +38,6 @@ pub struct HandlerErr {
     context: Cow<'static, str>,
     #[builder(into)]
     message: Option<Cow<'static, str>>,
-}
-
-impl HandlerErr {
-    pub fn from_db_conn_err((status, msg): (StatusCode, String)) -> Self {
-        Self::builder()
-            .http_status(status)
-            .code(ErrCode::DbConnectionError)
-            .context(format!("database connection failed: {}", msg))
-            .build()
-    }
 }
 
 impl IntoResponse for HandlerErr {
@@ -85,6 +76,16 @@ impl From<(StatusCode, ErrCode, String)> for HandlerErr {
             .http_status(status)
             .code(code)
             .context(message)
+            .build()
+    }
+}
+
+impl From<deadpool::PoolError> for HandlerErr {
+    fn from(err: deadpool::PoolError) -> Self {
+        Self::builder()
+            .http_status(StatusCode::INTERNAL_SERVER_ERROR)
+            .code(ErrCode::DbConnectionError)
+            .context(format!("database connection failed: {err}"))
             .build()
     }
 }

@@ -3,10 +3,11 @@
 
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
 use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use email_address::EmailAddress;
 use zxcvbn::{Score, zxcvbn};
 
-use crate::db::{DbPool, get_db_conn};
+use crate::db::DbPool;
 use crate::dto::{CreateUserRequest, LoginRequest, LoginResponse, UserCreatedResponse};
 use crate::handlers::{ErrCode, HandlerErr};
 use crate::models::{NewUser, User};
@@ -60,7 +61,7 @@ pub async fn create_user(
             .build());
     }
 
-    let mut conn = get_db_conn(&pool).map_err(HandlerErr::from_db_conn_err)?;
+    let mut conn = pool.get().await?;
 
     let password_hashed =
         hash_password(&payload.password).map_err(|e| (ErrCode::PasswordHashError, e))?;
@@ -74,6 +75,7 @@ pub async fn create_user(
     let created = diesel::insert_into(users)
         .values(&new_user)
         .get_result::<crate::models::User>(&mut conn)
+        .await
         .map_err(|e| {
             (
                 ErrCode::DbQueryError,
@@ -92,7 +94,7 @@ pub async fn login_user(
     State(pool): State<DbPool>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, HandlerErr> {
-    let mut conn = get_db_conn(&pool).map_err(HandlerErr::from_db_conn_err)?;
+    let mut conn = pool.get().await?;
 
     let err_builder = HandlerErr::builder()
         .http_status(StatusCode::UNAUTHORIZED)
@@ -102,6 +104,7 @@ pub async fn login_user(
     let user: User = users
         .filter(email.eq(&payload.email))
         .first::<User>(&mut conn)
+        .await
         .map_err(|e| {
             err_builder
                 .clone()

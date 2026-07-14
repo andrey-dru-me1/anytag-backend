@@ -7,7 +7,7 @@ use diesel_async::RunQueryDsl;
 use email_address::EmailAddress;
 use zxcvbn::{Score, zxcvbn};
 
-use crate::db::{DbPool};
+use crate::db::DbPool;
 use crate::dto::{CreateUserRequest, LoginRequest, LoginResponse, UserCreatedResponse};
 use crate::handlers::{ErrCode, HandlerErr};
 use crate::models::{NewUser, User};

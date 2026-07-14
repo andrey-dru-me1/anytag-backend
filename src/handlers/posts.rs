@@ -8,14 +8,15 @@ use axum::{
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::{db::DbPool, handlers::{ErrCode, HandlerErr}};
 use crate::dto::{PostResponse, PostsResponse};
 use crate::models::Post;
+use crate::{
+    db::DbPool,
+    handlers::{ErrCode, HandlerErr},
+};
 
 /// Handler for listing all posts
-pub async fn list_posts(
-    State(pool): State<DbPool>,
-) -> Result<impl IntoResponse, HandlerErr> {
+pub async fn list_posts(State(pool): State<DbPool>) -> Result<impl IntoResponse, HandlerErr> {
     use crate::schema::posts::dsl::*;
 
     let mut conn = pool.get().await?;

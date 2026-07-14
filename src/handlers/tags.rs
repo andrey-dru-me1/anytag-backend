@@ -8,14 +8,15 @@ use axum::{
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::{db::DbPool, handlers::{ErrCode, HandlerErr}};
 use crate::dto::{TagResponse, TagsResponse};
 use crate::models::Tag;
+use crate::{
+    db::DbPool,
+    handlers::{ErrCode, HandlerErr},
+};
 
 /// Handler for listing all tags
-pub async fn list_tags(
-    State(pool): State<DbPool>,
-) -> Result<impl IntoResponse, HandlerErr> {
+pub async fn list_tags(State(pool): State<DbPool>) -> Result<impl IntoResponse, HandlerErr> {
     use crate::schema::tags::dsl::*;
 
     let mut conn = pool.get().await?;
@@ -24,12 +25,7 @@ pub async fn list_tags(
         .order(created_at.desc())
         .load::<Tag>(&mut conn)
         .await
-        .map_err(|e| {
-            (
-                ErrCode::DbQueryError,
-                format!("Failed to load tags: {}", e),
-            )
-        })?;
+        .map_err(|e| (ErrCode::DbQueryError, format!("Failed to load tags: {}", e)))?;
 
     let tag_responses: Vec<TagResponse> = all_tags.into_iter().map(Into::into).collect();
 

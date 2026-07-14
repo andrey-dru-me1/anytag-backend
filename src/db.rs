@@ -21,5 +21,4 @@ pub fn establish_connection_pool() -> anyhow::Result<DbPool> {
     Pool::builder(config)
         .build()
         .context("Failed to create database connection pool")
-        .map_err(Into::into)
 }

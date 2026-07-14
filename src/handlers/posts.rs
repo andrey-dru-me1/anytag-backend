@@ -3,29 +3,30 @@
 
 use axum::{
     extract::State,
-    http::StatusCode,
     response::{IntoResponse, Json},
 };
 use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 
-use crate::db::{DbPool, get_db_conn};
+use crate::{db::DbPool, handlers::{ErrCode, HandlerErr}};
 use crate::dto::{PostResponse, PostsResponse};
 use crate::models::Post;
 
 /// Handler for listing all posts
 pub async fn list_posts(
     State(pool): State<DbPool>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, HandlerErr> {
     use crate::schema::posts::dsl::*;
 
-    let mut conn = get_db_conn(&pool)?;
+    let mut conn = pool.get().await?;
 
     let all_posts = posts
         .order(created_at.desc())
         .load::<Post>(&mut conn)
+        .await
         .map_err(|e| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                ErrCode::DbQueryError,
                 format!("Failed to load posts: {}", e),
             )
         })?;

@@ -3,29 +3,30 @@
 
 use axum::{
     extract::State,
-    http::StatusCode,
     response::{IntoResponse, Json},
 };
 use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 
-use crate::db::{DbPool, get_db_conn};
+use crate::{db::DbPool, handlers::{ErrCode, HandlerErr}};
 use crate::dto::{TagResponse, TagsResponse};
 use crate::models::Tag;
 
 /// Handler for listing all tags
 pub async fn list_tags(
     State(pool): State<DbPool>,
-) -> Result<impl IntoResponse, (StatusCode, String)> {
+) -> Result<impl IntoResponse, HandlerErr> {
     use crate::schema::tags::dsl::*;
 
-    let mut conn = get_db_conn(&pool)?;
+    let mut conn = pool.get().await?;
 
     let all_tags = tags
         .order(created_at.desc())
         .load::<Tag>(&mut conn)
+        .await
         .map_err(|e| {
             (
-                StatusCode::INTERNAL_SERVER_ERROR,
+                ErrCode::DbQueryError,
                 format!("Failed to load tags: {}", e),
             )
         })?;

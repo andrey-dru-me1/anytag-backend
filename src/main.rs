@@ -4,11 +4,6 @@
 use anyhow::Context;
 use anytag_backend::{db, router};
 
-mod dto;
-mod handlers;
-mod models;
-mod schema;
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize tracing

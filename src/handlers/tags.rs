@@ -42,6 +42,5 @@ mod tests {
     fn test_list_tags_handler_exists() {
         // Just verify the function exists and can be referenced
         let _ = list_tags;
-        assert!(true);
     }
 }

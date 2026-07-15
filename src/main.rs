@@ -2,13 +2,7 @@
 // Copyright (C) 2026 The Anytag Backend Authors
 
 use anyhow::Context;
-
-mod db;
-mod dto;
-mod handlers;
-mod models;
-mod router;
-mod schema;
+use anytag_backend::{db, router};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

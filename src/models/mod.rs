@@ -29,6 +29,5 @@ mod tests {
         let _tag_id: TagId = 42;
 
         // This just compiles, which is the test
-        assert!(true);
     }
 }

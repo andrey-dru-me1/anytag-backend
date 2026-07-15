@@ -24,22 +24,10 @@ pub fn create_router(pool: DbPool) -> Router {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use diesel_async::pg::AsyncPgConnection;
-    use diesel_async::pooled_connection::deadpool::Pool;
 
+    /// Compile-time check that `create_router` accepts a `DbPool`.
     #[test]
-    fn test_create_router_with_mock_pool() {
-        // Test that create_router compiles and accepts a DbPool
-        // Verify function signature for the async connection pool.
-        let _func: fn(Pool<AsyncPgConnection>) -> Router = create_router;
-        assert!(true);
-    }
-
-    #[test]
-    fn test_router_function_exists() {
-        // Simple test to verify the function signature
-        // This is a compilation test more than a runtime test
-        let _ = create_router as fn(Pool<AsyncPgConnection>) -> Router;
-        assert!(true);
+    fn test_create_router_type_check() {
+        let _: fn(DbPool) -> Router = create_router;
     }
 }

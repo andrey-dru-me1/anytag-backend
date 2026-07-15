@@ -54,7 +54,7 @@ mod tests {
         assert_eq!(response.id, 1);
         assert_eq!(response.user_id, 42);
         assert_eq!(response.label, "rust");
-        assert_eq!(response.public, true);
+        assert!(response.public);
         assert_eq!(response.created_at, "1970-01-01 00:00:00");
     }
 
@@ -86,9 +86,9 @@ mod tests {
         assert_eq!(tag_responses.len(), 2);
         assert_eq!(tag_responses[0].id, 1);
         assert_eq!(tag_responses[0].label, "rust");
-        assert_eq!(tag_responses[0].public, true);
+        assert!(tag_responses[0].public);
         assert_eq!(tag_responses[1].id, 2);
         assert_eq!(tag_responses[1].label, "axum");
-        assert_eq!(tag_responses[1].public, false);
+        assert!(!tag_responses[1].public);
     }
 }

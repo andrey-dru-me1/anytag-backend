@@ -130,6 +130,7 @@ Fixes ANY-5678
 - **Merge strategy**: Merge commits (not squash, not rebase). See [`docs/GIT_WORKFLOW.md`](../../../docs/GIT_WORKFLOW.md).
 - **Every PR MUST reference a YouTrack ticket ID** in the title (unless release or trivial chore).
 - **Every commit within the PR MUST also reference a YouTrack ticket**: `type(TICKET-ID): subject`.
+- All the items in **Testing** and **Checklist** must be unchecked. User will check them manually directly on GitHub.
 - See [`AGENTS.md`](../../../AGENTS.md) for full project conventions.
 
 ## Related Skills

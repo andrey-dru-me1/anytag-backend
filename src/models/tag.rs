@@ -43,7 +43,7 @@ mod tests {
         assert_eq!(tag.id, 1);
         assert_eq!(tag.user_id, 42);
         assert_eq!(tag.label, "rust");
-        assert_eq!(tag.public, true);
+        assert!(tag.public);
         #[allow(deprecated)]
         let timestamp = tag.created_at.timestamp();
         assert_eq!(timestamp, 2000);

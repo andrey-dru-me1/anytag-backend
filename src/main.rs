@@ -2,12 +2,11 @@
 // Copyright (C) 2026 The Anytag Backend Authors
 
 use anyhow::Context;
+use anytag_backend::{db, router};
 
-mod db;
 mod dto;
 mod handlers;
 mod models;
-mod router;
 mod schema;
 
 #[tokio::main]

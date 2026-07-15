@@ -17,7 +17,7 @@ use serde::Serialize;
 use std::borrow::Cow;
 use strum::Display;
 
-#[derive(strum::AsRefStr, Clone, Display)]
+#[derive(Debug, strum::AsRefStr, Clone, Display)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum ErrCode {
     WeakPassword,
@@ -28,7 +28,7 @@ pub enum ErrCode {
     InvalidEmail,
 }
 
-#[derive(bon::Builder)]
+#[derive(bon::Builder, Debug)]
 #[builder(derive(Clone))]
 pub struct HandlerErr {
     #[builder(default = StatusCode::INTERNAL_SERVER_ERROR)]
@@ -38,6 +38,20 @@ pub struct HandlerErr {
     context: Cow<'static, str>,
     #[builder(into)]
     message: Option<Cow<'static, str>>,
+}
+
+impl HandlerErr {
+    /// Returns the HTTP status code for this error.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn status(&self) -> StatusCode {
+        self.http_status
+    }
+
+    /// Returns a reference to the error code.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn err_code(&self) -> &ErrCode {
+        &self.code
+    }
 }
 
 impl IntoResponse for HandlerErr {

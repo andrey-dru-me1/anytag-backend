@@ -55,6 +55,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-test",
+ "tower",
  "tracing",
  "tracing-subscriber",
  "zxcvbn",

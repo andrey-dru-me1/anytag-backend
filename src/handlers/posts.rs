@@ -47,6 +47,5 @@ mod tests {
     fn test_list_posts_handler_exists() {
         // Just verify the function exists and can be referenced
         let _ = list_posts;
-        assert!(true);
     }
 }

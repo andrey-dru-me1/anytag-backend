@@ -30,12 +30,12 @@ fn hash_password(password: &str) -> Result<String, String> {
         .map_err(|e| format!("argon2 password hashing failed: {}", e))
 }
 
-/// Handler for creating a new user
-pub async fn create_user(
-    State(pool): State<DbPool>,
-    Json(payload): Json<CreateUserRequest>,
-) -> Result<impl IntoResponse, HandlerErr> {
-    if !EmailAddress::is_valid(&payload.email) {
+/// Validate email format.
+///
+/// Returns `Ok(())` if the email is valid, or a `HandlerErr` with
+/// [`ErrCode::InvalidEmail`] and status [`StatusCode::UNPROCESSABLE_ENTITY`].
+fn validate_email(input: &str) -> Result<(), HandlerErr> {
+    if !EmailAddress::is_valid(input) {
         return Err(HandlerErr::builder()
             .http_status(StatusCode::UNPROCESSABLE_ENTITY)
             .code(ErrCode::InvalidEmail)
@@ -43,8 +43,20 @@ pub async fn create_user(
             .message("Invalid email")
             .build());
     }
+    Ok(())
+}
 
-    let estimate = zxcvbn(&payload.password, &[&payload.name, &payload.email]);
+/// Validate password strength using zxcvbn.
+///
+/// Returns `Ok(())` if the password scores at least [`Score::Three`],
+/// or a `HandlerErr` with [`ErrCode::WeakPassword`] and
+/// status [`StatusCode::UNPROCESSABLE_ENTITY`].
+fn validate_password_strength(
+    password: &str,
+    user_name: &str,
+    user_email: &str,
+) -> Result<(), HandlerErr> {
+    let estimate = zxcvbn(password, &[user_name, user_email]);
     if estimate.score() < Score::Three {
         let mut message = "The password is weak.".to_string();
         if let Some(feedback) = estimate.feedback() {
@@ -60,6 +72,16 @@ pub async fn create_user(
             .message(message)
             .build());
     }
+    Ok(())
+}
+
+/// Handler for creating a new user
+pub async fn create_user(
+    State(pool): State<DbPool>,
+    Json(payload): Json<CreateUserRequest>,
+) -> Result<impl IntoResponse, HandlerErr> {
+    validate_email(&payload.email)?;
+    validate_password_strength(&payload.password, &payload.name, &payload.email)?;
 
     let mut conn = pool.get().await?;
 
@@ -138,4 +160,104 @@ pub async fn login_user(
         user_id: user.id,
         email: user.email,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use argon2::password_hash::PasswordHash;
+    use axum::http::StatusCode;
+
+    // -----------------------------------------------------------------------
+    // hash_password
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_hash_password_produces_valid_hash() {
+        let hash = hash_password("strongpassword123").expect("hashing should succeed");
+        assert!(
+            hash.starts_with("$argon2"),
+            "hash should start with '$argon2', got: {hash}"
+        );
+        // Verify the hash can be parsed back
+        PasswordHash::new(&hash).expect("hash should be parseable");
+    }
+
+    #[test]
+    fn test_hash_password_produces_unique_salts() {
+        let hash1 = hash_password("password").expect("hashing should succeed");
+        let hash2 = hash_password("password").expect("hashing should succeed");
+        assert_ne!(
+            hash1, hash2,
+            "same password should produce different hashes"
+        );
+    }
+
+    #[test]
+    fn test_hash_password_unicode() {
+        let hash = hash_password("пароль你好🔒").expect("unicode password should hash");
+        assert!(hash.starts_with("$argon2"));
+    }
+
+    // -----------------------------------------------------------------------
+    // validate_email
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_email_valid() {
+        let result = validate_email("user@example.com");
+        assert!(
+            result.is_ok(),
+            "valid email should pass: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_validate_email_invalid() {
+        let err = validate_email("not-an-email").unwrap_err();
+        assert_eq!(err.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(err.err_code().as_ref(), "INVALID_EMAIL");
+    }
+
+    #[test]
+    fn test_validate_email_empty() {
+        let err = validate_email("").unwrap_err();
+        // An empty string is not a valid email
+        assert_eq!(err.err_code().as_ref(), "INVALID_EMAIL");
+    }
+
+    // -----------------------------------------------------------------------
+    // validate_password_strength
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_validate_password_strength_strong() {
+        let result = validate_password_strength(
+            "CorrectHorseBatteryStaple99!",
+            "alice",
+            "alice@example.com",
+        );
+        assert!(
+            result.is_ok(),
+            "strong password should pass: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_validate_password_strength_weak() {
+        let err = validate_password_strength("12345678", "bob", "bob@example.com").unwrap_err();
+        assert_eq!(err.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(err.err_code().as_ref(), "WEAK_PASSWORD");
+    }
+
+    #[test]
+    fn test_validate_password_strength_with_user_info() {
+        // Password containing the user's name should still execute without
+        // panicking. zxcvbn penalises passwords that contain user info.
+        let result = validate_password_strength("Alice123!", "Alice", "alice@example.com");
+        // zxcvbn may consider this weak or strong; we just verify no panic.
+        let _ = result;
+    }
 }

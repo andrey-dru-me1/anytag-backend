@@ -1,3 +1,6 @@
+-- SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+-- SPDX-License-Identifier: AGPL-3.0-only
+
 CREATE TABLE image_sources (
     file_sha256_hash CHAR(64) PRIMARY KEY,
     s3_path VARCHAR(512) NOT NULL,

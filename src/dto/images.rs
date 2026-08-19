@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+// SPDX-License-Identifier: AGPL-3.0-only
+
 use chrono::NaiveDateTime;
 use serde::Serialize;
 

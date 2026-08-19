@@ -53,14 +53,15 @@ direnv allow
 
 Now the environment loads automatically whenever you enter the project directory!
 
-**Note:** `.envrc` is in `.gitignore` to keep local configurations out of version control. The template file `.envrc.template` contains the base configuration that should be copied to `.envrc` for local use.
+**Note:** `.envrc` is in `.gitignore` to keep local configurations out of version control. The template file `.envrc.example` contains the base configuration that should be copied to `.envrc` for local use.
 
 ## Development Workflow
 
-### 1. Start the Database
+### 1. Start the Database and Object Storage
 
 ```bash
-docker compose up -d db
+# Starts PostgreSQL and SeaweedFS (local S3-compatible storage)
+docker compose up -d
 ```
 
 ### 2. Run Database Migrations
@@ -124,11 +125,14 @@ reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" 
 The project follows a modular Rust web application architecture with clear separation of concerns. Key components include:
 
 - **Application entry point** (`src/main.rs`) - Sets up the web server and routes
-- **Database models** (`src/models/`) - Define data structures and relationships
-- **Request/response DTOs** (`src/dto/`) - Data transfer objects for API boundaries
-- **HTTP handlers** (`src/handlers/`) - Process incoming requests and return responses
-- **Database layer** (`src/db.rs`) - Connection management and query utilities
-- **Routing** (`src/router.rs`) - URL routing configuration
+- **Configuration** (`src/config.rs`) - Builds the async database pool and the S3 client, auto-creates the media bucket on startup
+- **Database models** (`src/models/`) - Define data structures and relationships (including `image_sources` and `user_images`)
+- **Request/response DTOs** (`src/dto/`) - Data transfer objects for API boundaries (including image DTOs)
+- **HTTP handlers** (`src/handlers/`) - Process incoming requests and return responses (including media upload/retrieval)
+- **Database layer** - Connection management via `diesel-async` and deadpool (see `src/config.rs`)
+- **Routing** (`src/router.rs`) - URL routing configuration (includes `/api/v1/media/images` routes)
+
+For details on the media subsystem and object storage layout, see [MEDIA.md](./MEDIA.md).
 
 For the most current and detailed structure, please refer to the source code directly as the project evolves frequently.
 
@@ -138,14 +142,24 @@ The following environment variables are used:
 
 ### Individual Database Components (in `.env` file)
 
-- `POSTGRES_USER=anytag` - Database username
-- `POSTGRES_PASSWORD=123456` - Database password
-- `POSTGRES_DB=anytag` - Database name
+- `DB_USER=anytag` - Database username
+- `DB_PASS=123456` - Database password
+- `DB_NAME=anytag` - Database name
 - `DB_PORT=54321` - Port for PostgreSQL (mapped from container port 5432)
+
+### S3-Compatible Object Storage (in `.env` file)
+
+The application stores media files in an S3-compatible object store (SeaweedFS locally, via Docker).
+
+- `AWS_ACCESS_KEY_ID=anytag` - S3 access key (SeaweedFS credentials)
+- `AWS_SECRET_ACCESS_KEY=change_me` - S3 secret key (SeaweedFS credentials)
+- `S3_BUCKET=anytag-bucket` - Bucket used for media storage (auto-created on startup)
+- `S3_BASE_URL=http://localhost:8333` - S3 endpoint URL (SeaweedFS S3 access point)
+
+See [MEDIA.md](./MEDIA.md) for the full media storage architecture.
 
 ### Constructed Variables
 
-- `DATABASE_URL` - Automatically constructed from the above components as: `postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${DB_PORT}/${POSTGRES_DB}`
 - `RUST_BACKTRACE=1` (full backtraces on panic)
 - `CARGO_TERM_COLOR=always` (colored output)
 

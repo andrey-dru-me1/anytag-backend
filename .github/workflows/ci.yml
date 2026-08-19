@@ -12,7 +12,13 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  DATABASE_URL: postgres://postgres@localhost:5432/anytag_test
+
+  DB_TYPE: postgres
+  DB_HOST: localhost
+  DB_PORT: 5432
+  DB_USER: postgres
+  DB_PASS: change_me
+  DB_NAME: anytag_test
 
 jobs:
   test-nix:
@@ -26,16 +32,16 @@ jobs:
       postgres:
         image: postgres:18.3-alpine3.23
         env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_USER: postgres
-          POSTGRES_DB: anytag_test
+          POSTGRES_USER: ${{ env.DB_USER }}
+          POSTGRES_PASSWORD: ${{ env.DB_PASS }}
+          POSTGRES_DB: ${{ env.DB_NAME }}
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
         ports:
-          - 5432:5432
+          - "${{ env.DB_PORT }}:5432"
 
     steps:
       - name: Checkout code

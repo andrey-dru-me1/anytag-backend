@@ -7,9 +7,9 @@ use diesel_async::RunQueryDsl;
 use email_address::EmailAddress;
 use zxcvbn::{Score, zxcvbn};
 
-use crate::db::DbPool;
+use crate::config::Config;
 use crate::dto::{CreateUserRequest, LoginRequest, LoginResponse, UserCreatedResponse};
-use crate::handlers::{ErrCode, HandlerErr};
+use crate::handlers::{ApiError, ApiErrorCode};
 use crate::models::{NewUser, User};
 use crate::schema::users::dsl::*;
 
@@ -34,11 +34,11 @@ fn hash_password(password: &str) -> Result<String, String> {
 ///
 /// Returns `Ok(())` if the email is valid, or a `HandlerErr` with
 /// [`ErrCode::InvalidEmail`] and status [`StatusCode::UNPROCESSABLE_ENTITY`].
-fn validate_email(input: &str) -> Result<(), HandlerErr> {
+fn validate_email(input: &str) -> Result<(), ApiError> {
     if !EmailAddress::is_valid(input) {
-        return Err(HandlerErr::builder()
+        return Err(ApiError::builder()
             .http_status(StatusCode::UNPROCESSABLE_ENTITY)
-            .code(ErrCode::InvalidEmail)
+            .code(ApiErrorCode::InvalidEmail)
             .context("email format validation failed")
             .message("Invalid email")
             .build());
@@ -55,16 +55,16 @@ fn validate_password_strength(
     password: &str,
     user_name: &str,
     user_email: &str,
-) -> Result<(), HandlerErr> {
+) -> Result<(), ApiError> {
     let estimate = zxcvbn(password, &[user_name, user_email]);
     if estimate.score() < Score::Three {
         let mut message = "The password is weak.".to_string();
         if let Some(feedback) = estimate.feedback() {
             message = format!("{} {}", message, feedback);
         }
-        return Err(HandlerErr::builder()
+        return Err(ApiError::builder()
             .http_status(StatusCode::UNPROCESSABLE_ENTITY)
-            .code(ErrCode::WeakPassword)
+            .code(ApiErrorCode::WeakPassword)
             .context(format!(
                 "password complexity check failed: zxcvbn score is {}",
                 estimate.score()
@@ -77,16 +77,16 @@ fn validate_password_strength(
 
 /// Handler for creating a new user
 pub async fn create_user(
-    State(pool): State<DbPool>,
+    State(config): State<Config>,
     Json(payload): Json<CreateUserRequest>,
-) -> Result<impl IntoResponse, HandlerErr> {
+) -> Result<impl IntoResponse, ApiError> {
     validate_email(&payload.email)?;
     validate_password_strength(&payload.password, &payload.name, &payload.email)?;
 
-    let mut conn = pool.get().await?;
+    let mut conn = config.db_pool.get().await?;
 
     let password_hashed =
-        hash_password(&payload.password).map_err(|e| (ErrCode::PasswordHashError, e))?;
+        hash_password(&payload.password).map_err(|e| (ApiErrorCode::PasswordHashError, e))?;
 
     let new_user = NewUser {
         name: payload.name,
@@ -100,7 +100,7 @@ pub async fn create_user(
         .await
         .map_err(|e| {
             (
-                ErrCode::DbQueryError,
+                ApiErrorCode::DbQueryError,
                 format!("failed to create new user: {}", e),
             )
         })?;
@@ -113,14 +113,14 @@ pub async fn create_user(
 }
 
 pub async fn login_user(
-    State(pool): State<DbPool>,
+    State(config): State<Config>,
     Json(payload): Json<LoginRequest>,
-) -> Result<impl IntoResponse, HandlerErr> {
-    let mut conn = pool.get().await?;
+) -> Result<impl IntoResponse, ApiError> {
+    let mut conn = config.db_pool.get().await?;
 
-    let err_builder = HandlerErr::builder()
+    let err_builder = ApiError::builder()
         .http_status(StatusCode::UNAUTHORIZED)
-        .code(ErrCode::InvalidCredentials)
+        .code(ApiErrorCode::InvalidCredentials)
         .message("Invalid email or password");
 
     let user: User = users

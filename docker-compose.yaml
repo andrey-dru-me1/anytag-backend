@@ -2,18 +2,35 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 services:
-  db:
+  postgres:
     image: postgres:18.3-alpine3.23
-    container_name: anytag_db
+    container_name: postgres
     restart: always
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+      POSTGRES_DB: ${DB_NAME}
     ports:
       - "${DB_PORT}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/18/docker
+      - postgres_data:/var/lib/postgresql
+
+  seaweed:
+    image: chrislusf/seaweedfs:4.40
+    container_name: seaweedfs
+    restart: always
+    ports:
+      - 8333:8333 # S3 access point
+      - 9333:9333 # admin panel
+      - 8888:8888 # filer
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      S3_BUCKET: ${S3_BUCKET}
+    volumes:
+      - seaweed_data:/data
+    command: [ "mini", "-dir=/data" ]
 
 volumes:
   postgres_data:
+  seaweed_data:

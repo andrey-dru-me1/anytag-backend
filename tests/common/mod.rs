@@ -2,7 +2,7 @@
 // Copyright (C) 2026 The Anytag Backend Authors
 
 use anyhow::Context;
-use anytag_backend::db::DbPool;
+use anytag_backend::config::{Config, DbPool};
 use anytag_backend::router::create_router;
 use axum::Router;
 use diesel::sql_query;
@@ -15,7 +15,7 @@ use diesel_async::pooled_connection::deadpool::Pool;
 ///
 /// Uses `max_size=1` to minimise resource usage in tests.
 fn test_db_pool() -> anyhow::Result<DbPool> {
-    dotenv::dotenv().ok();
+    dotenvy::dotenv().ok();
     let database_url =
         std::env::var("DATABASE_URL").context("DATABASE_URL must be set for integration tests")?;
 
@@ -92,8 +92,8 @@ impl TestApp {
     /// Create a new `TestApp` with an isolated database transaction and a router.
     pub async fn new() -> anyhow::Result<Self> {
         let tx = TestTransaction::new().await?;
-        let pool = tx.pool();
-        let app = create_router(pool);
+        let config = Config::from_db_pool(tx.pool());
+        let app = create_router(config);
         Ok(Self { tx, app })
     }
 

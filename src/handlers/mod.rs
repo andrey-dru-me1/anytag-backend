@@ -2,12 +2,14 @@
 // Copyright (C) 2026 The Anytag Backend Authors
 
 mod health;
+mod images;
 mod posts;
 mod tags;
 mod users;
 
 use diesel_async::pooled_connection::deadpool;
 pub use health::*;
+pub use images::*;
 pub use posts::*;
 pub use tags::*;
 pub use users::*;
@@ -19,28 +21,32 @@ use strum::Display;
 
 #[derive(Debug, strum::AsRefStr, Clone, Display)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
-pub enum ErrCode {
+pub enum ApiErrorCode {
     WeakPassword,
     DbConnectionError,
     DbQueryError,
     PasswordHashError,
     InvalidCredentials,
     InvalidEmail,
+    FileUploadError,
+    PathParameterParseError,
+    S3StorageError,
+    ImageNotFound,
 }
 
 #[derive(bon::Builder, Debug)]
 #[builder(derive(Clone))]
-pub struct HandlerErr {
+pub struct ApiError {
     #[builder(default = StatusCode::INTERNAL_SERVER_ERROR)]
     http_status: StatusCode,
-    code: ErrCode,
+    code: ApiErrorCode,
     #[builder(into)]
     context: Cow<'static, str>,
     #[builder(into)]
     message: Option<Cow<'static, str>>,
 }
 
-impl HandlerErr {
+impl ApiError {
     /// Returns the HTTP status code for this error.
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn status(&self) -> StatusCode {
@@ -49,12 +55,12 @@ impl HandlerErr {
 
     /// Returns a reference to the error code.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn err_code(&self) -> &ErrCode {
+    pub fn err_code(&self) -> &ApiErrorCode {
         &self.code
     }
 }
 
-impl IntoResponse for HandlerErr {
+impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
         tracing::error!(
             code = %self.code,
@@ -78,14 +84,14 @@ impl IntoResponse for HandlerErr {
     }
 }
 
-impl From<(ErrCode, String)> for HandlerErr {
-    fn from((code, message): (ErrCode, String)) -> Self {
+impl From<(ApiErrorCode, String)> for ApiError {
+    fn from((code, message): (ApiErrorCode, String)) -> Self {
         Self::builder().code(code).context(message).build()
     }
 }
 
-impl From<(StatusCode, ErrCode, String)> for HandlerErr {
-    fn from((status, code, message): (StatusCode, ErrCode, String)) -> Self {
+impl From<(StatusCode, ApiErrorCode, String)> for ApiError {
+    fn from((status, code, message): (StatusCode, ApiErrorCode, String)) -> Self {
         Self::builder()
             .http_status(status)
             .code(code)
@@ -94,12 +100,22 @@ impl From<(StatusCode, ErrCode, String)> for HandlerErr {
     }
 }
 
-impl From<deadpool::PoolError> for HandlerErr {
+impl From<deadpool::PoolError> for ApiError {
     fn from(err: deadpool::PoolError) -> Self {
         Self::builder()
             .http_status(StatusCode::INTERNAL_SERVER_ERROR)
-            .code(ErrCode::DbConnectionError)
+            .code(ApiErrorCode::DbConnectionError)
             .context(format!("database connection failed: {err}"))
+            .build()
+    }
+}
+
+impl From<diesel::result::Error> for ApiError {
+    fn from(err: diesel::result::Error) -> Self {
+        Self::builder()
+            .http_status(StatusCode::INTERNAL_SERVER_ERROR)
+            .code(ApiErrorCode::DbQueryError)
+            .context(format!("database query failed: {err}"))
             .build()
     }
 }

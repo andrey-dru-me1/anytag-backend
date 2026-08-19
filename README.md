@@ -17,14 +17,16 @@ Anytag is a social platform where users can:
 - Create and manage tags
 - Subscribe to tags and other users
 - Control visibility of tags to specific users
+- Upload and retrieve media images (stored in an S3-compatible object store)
 
 ## Tech Stack
 
 - **Language**: Rust 2024 Edition
-- **Framework**: Standard library with Diesel ORM
+- **Framework**: Axum with Diesel ORM
 - **Database**: PostgreSQL 18.3
+- **Object Storage**: S3-compatible (local SeaweedFS via Docker)
 - **Containerization**: Docker & Docker Compose
-- **ORM**: Diesel 2.3.6 with PostgreSQL support
+- **ORM**: Diesel 2.3 with diesel-async (async PostgreSQL support)
 - **Environment Management**: Nix + direnv (deterministic development environment)
 
 ## Quick Start
@@ -43,8 +45,8 @@ nix develop
 # Copy environment configuration
 cp .env.example .env
 
-# Start the database
-docker compose up -d db
+# Start the database and local S3-compatible storage (SeaweedFS)
+docker compose up -d
 
 # Setup database with migrations
 diesel database setup
@@ -58,7 +60,7 @@ If not using Nix:
 2. Install diesel-cli: `cargo install diesel_cli --no-default-features --features postgres`
 3. Install PostgreSQL development libraries for your platform
 4. Copy environment configuration: `cp .env.example .env`
-5. Start the database: `docker compose up -d db`
+5. Start the database and local S3-compatible storage (SeaweedFS): `docker compose up -d`
 6. Setup database with migrations: `diesel database setup`
 
 ### 4. Build and Run
@@ -80,7 +82,7 @@ The project follows a standard Rust web application structure with separate modu
 
 ## Database
 
-The application uses 7 main tables:
+The application uses 9 main tables:
 
 1. **users** - User accounts with authentication
 2. **posts** - User-created posts
@@ -89,6 +91,10 @@ The application uses 7 main tables:
 5. **user_tag_subscriptions** - Users subscribing to tags
 6. **user_user_subscriptions** - Users following other users
 7. **tag_user_visibility** - Custom visibility settings for tags
+8. **image_sources** - Deduplicated image content metadata hosted in S3
+9. **user_images** - User-uploaded images referencing an `image_sources` entry
+
+For details on the media/image subsystem (endpoints, storage layout, and SeaweedFS), see [docs/MEDIA.md](docs/MEDIA.md).
 
 ## Common Commands
 
@@ -107,8 +113,8 @@ diesel migration revert # Revert last migration
 diesel migration list   # List all migrations
 
 # Docker
-docker compose up -d db    # Start database
-docker compose down -v     # Stop and remove database with volumes
+docker compose up -d        # Start database and SeaweedFS (S3-compatible) storage
+docker compose down -v      # Stop and remove containers with volumes
 ```
 
 ## Documentation
@@ -122,6 +128,7 @@ Detailed documentation is available in the `docs/` directory:
 - **[REUSE Compliance](docs/REUSE.md)** - License management and SPDX headers
 - **[Git Workflow](docs/GIT_WORKFLOW.md)** - Branch strategy, commit conventions, and PR guidelines
 - **[Windows Setup](docs/WINDOWS.md)** - Windows-specific development setup with WSL2
+- **[Media & S3 Storage](docs/MEDIA.md)** - Image upload/retrieval endpoints and object storage layout
 - **Database Schema** - See `migrations/` directory for SQL definitions
 
 ## Troubleshooting

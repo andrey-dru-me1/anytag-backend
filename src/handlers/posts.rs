@@ -8,18 +8,16 @@ use axum::{
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
+use crate::config::Config;
 use crate::dto::{PostResponse, PostsResponse};
+use crate::handlers::{ApiError, ApiErrorCode};
 use crate::models::Post;
-use crate::{
-    db::DbPool,
-    handlers::{ErrCode, HandlerErr},
-};
 
 /// Handler for listing all posts
-pub async fn list_posts(State(pool): State<DbPool>) -> Result<impl IntoResponse, HandlerErr> {
+pub async fn list_posts(State(config): State<Config>) -> Result<impl IntoResponse, ApiError> {
     use crate::schema::posts::dsl::*;
 
-    let mut conn = pool.get().await?;
+    let mut conn = config.db_pool.get().await?;
 
     let all_posts = posts
         .order(created_at.desc())
@@ -27,7 +25,7 @@ pub async fn list_posts(State(pool): State<DbPool>) -> Result<impl IntoResponse,
         .await
         .map_err(|e| {
             (
-                ErrCode::DbQueryError,
+                ApiErrorCode::DbQueryError,
                 format!("Failed to load posts: {}", e),
             )
         })?;

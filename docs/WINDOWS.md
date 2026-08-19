@@ -246,7 +246,7 @@ nix develop
 # Should see welcome message with all tools listed
 
 # 6. Test database
-docker compose up -d db
+docker compose up -d postgres
 docker compose ps  # Should show db running
 
 # 7. Test migrations

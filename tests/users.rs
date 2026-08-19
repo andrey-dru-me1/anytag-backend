@@ -4,7 +4,7 @@
 mod common;
 
 use anyhow::Context;
-use anytag_backend::handlers::ErrCode;
+use anytag_backend::handlers::ApiErrorCode;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use common::TestApp;
@@ -73,7 +73,7 @@ async fn test_create_user_invalid_email() -> anyhow::Result<()> {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let json_body = response_json(response).await?;
-    assert_eq!(json_body["code"], ErrCode::InvalidEmail.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::InvalidEmail.as_ref());
     Ok(())
 }
 
@@ -92,7 +92,7 @@ async fn test_create_user_weak_password() -> anyhow::Result<()> {
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let json_body = response_json(response).await?;
-    assert_eq!(json_body["code"], ErrCode::WeakPassword.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::WeakPassword.as_ref());
     Ok(())
 }
 
@@ -123,7 +123,7 @@ async fn test_create_user_duplicate_email() -> anyhow::Result<()> {
     assert_eq!(response2.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
     let json_body = response_json(response2).await?;
-    assert_eq!(json_body["code"], ErrCode::DbQueryError.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::DbQueryError.as_ref());
     Ok(())
 }
 
@@ -199,7 +199,7 @@ async fn test_login_user_wrong_password() -> anyhow::Result<()> {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     let json_body = response_json(response).await?;
-    assert_eq!(json_body["code"], ErrCode::InvalidCredentials.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::InvalidCredentials.as_ref());
     Ok(())
 }
 
@@ -220,6 +220,6 @@ async fn test_login_user_not_found() -> anyhow::Result<()> {
 
     let json_body = response_json(response).await?;
     // Same error code as wrong password (security best practice)
-    assert_eq!(json_body["code"], ErrCode::InvalidCredentials.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::InvalidCredentials.as_ref());
     Ok(())
 }

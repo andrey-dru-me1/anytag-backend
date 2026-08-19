@@ -4,6 +4,7 @@
 mod common;
 
 use anyhow::Context;
+use anytag_backend::config::Config;
 use anytag_backend::models::NewTag;
 use anytag_backend::router::create_router;
 use anytag_backend::schema::tags::dsl;
@@ -58,9 +59,9 @@ async fn insert_user(conn: &mut diesel_async::AsyncPgConnection) -> anyhow::Resu
 #[tokio::test]
 async fn test_list_tags_returns_ok() -> anyhow::Result<()> {
     let tx = TestTransaction::new().await?;
-    let pool = tx.pool();
+    let config = Config::from_db_pool(tx.pool());
 
-    let app = create_router(pool);
+    let app = create_router(config);
 
     let response = app.oneshot(json_get("/api/v1/tags")?).await?;
     assert_eq!(response.status(), StatusCode::OK);
@@ -74,6 +75,7 @@ async fn test_list_tags_returns_ok() -> anyhow::Result<()> {
 async fn test_list_tags_includes_inserted_data() -> anyhow::Result<()> {
     let tx = TestTransaction::new().await?;
     let pool = tx.pool();
+    let config = Config::from_db_pool(pool.clone());
 
     // Insert a user and some tags within the transaction.
     {
@@ -100,7 +102,7 @@ async fn test_list_tags_includes_inserted_data() -> anyhow::Result<()> {
             .context("Failed to insert test tags")?;
     }
 
-    let app = create_router(pool);
+    let app = create_router(config);
 
     let response = app.oneshot(json_get("/api/v1/tags")?).await?;
     assert_eq!(response.status(), StatusCode::OK);

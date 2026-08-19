@@ -53,8 +53,6 @@
           ];
 
           env = {
-            # DATABASE_URL will be constructed from .env variables in shellHook
-            # or will be set by .env file loaded via direnv
             RUST_BACKTRACE = "1";
             CARGO_TERM_COLOR = "always";
           };
@@ -62,15 +60,6 @@
           LD_LIBRARY_PATH = "${pkgs.openssl.out}/lib";
 
           shellHook = ''
-            # Construct DATABASE_URL from individual components if not already set
-            if [ -z "$DATABASE_URL" ] && [ -n "$POSTGRES_USER" ] && [ -n "$POSTGRES_PASSWORD" ] && [ -n "$POSTGRES_DB" ] && [ -n "$DB_PORT" ]; then
-              export DATABASE_URL="postgres://$POSTGRES_USER:$POSTGRES_PASSWORD@localhost:$DB_PORT/$POSTGRES_DB"
-              echo "🔗 Constructed DATABASE_URL from environment variables"
-            elif [ -z "$DATABASE_URL" ]; then
-              echo "⚠️  DATABASE_URL is not set and required components are missing"
-              echo "   Set DATABASE_URL or POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB, DB_PORT in .env"
-            fi
-
             echo "========================================"
             echo "🎯 anytag-backend Development Environment"
             echo "========================================"
@@ -81,7 +70,7 @@
             echo "  Diesel: $(diesel -V | cut -d' ' -f2)"
             echo ""
             echo "🚀 Quick start:"
-            echo "  1. docker compose up -d db"
+            echo "  1. docker compose up -d postgres"
             echo "  2. diesel migration run"
             echo "  3. cargo watch -x run   (hot-reload dev server)"
             echo "========================================"

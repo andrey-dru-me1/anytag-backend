@@ -5,7 +5,7 @@ use diesel::prelude::*;
 
 use super::{PostId, TagId, UserId};
 
-#[derive(Queryable, Identifiable, Debug, Clone)]
+#[derive(Queryable, Insertable, Identifiable, Debug, Clone)]
 #[diesel(table_name = crate::schema::post_tags)]
 #[diesel(primary_key(post_id, tag_id))]
 pub struct PostTag {
@@ -13,14 +13,7 @@ pub struct PostTag {
     pub tag_id: TagId,
 }
 
-#[derive(Insertable, Debug, Clone)]
-#[diesel(table_name = crate::schema::post_tags)]
-pub struct NewPostTag {
-    pub post_id: PostId,
-    pub tag_id: TagId,
-}
-
-#[derive(Queryable, Identifiable, Debug, Clone)]
+#[derive(Queryable, Insertable, Identifiable, Debug, Clone)]
 #[diesel(table_name = crate::schema::user_tag_subscriptions)]
 #[diesel(primary_key(user_id, tag_id))]
 pub struct UserTagSubscription {
@@ -28,14 +21,7 @@ pub struct UserTagSubscription {
     pub tag_id: TagId,
 }
 
-#[derive(Insertable, Debug, Clone)]
-#[diesel(table_name = crate::schema::user_tag_subscriptions)]
-pub struct NewUserTagSubscription {
-    pub user_id: UserId,
-    pub tag_id: TagId,
-}
-
-#[derive(Queryable, Identifiable, Debug, Clone)]
+#[derive(Queryable, Insertable, Identifiable, Debug, Clone)]
 #[diesel(table_name = crate::schema::user_user_subscriptions)]
 #[diesel(primary_key(follower_id, followed_id))]
 pub struct UserUserSubscription {
@@ -43,24 +29,10 @@ pub struct UserUserSubscription {
     pub followed_id: UserId,
 }
 
-#[derive(Insertable, Debug, Clone)]
-#[diesel(table_name = crate::schema::user_user_subscriptions)]
-pub struct NewUserUserSubscription {
-    pub follower_id: UserId,
-    pub followed_id: UserId,
-}
-
-#[derive(Queryable, Identifiable, Debug, Clone)]
+#[derive(Queryable, Insertable, Identifiable, Debug, Clone)]
 #[diesel(table_name = crate::schema::tag_user_visibility)]
 #[diesel(primary_key(tag_id, user_id))]
 pub struct TagUserVisibility {
-    pub tag_id: TagId,
-    pub user_id: UserId,
-}
-
-#[derive(Insertable, Debug, Clone)]
-#[diesel(table_name = crate::schema::tag_user_visibility)]
-pub struct NewTagUserVisibility {
     pub tag_id: TagId,
     pub user_id: UserId,
 }

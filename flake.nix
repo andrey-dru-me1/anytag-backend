@@ -53,6 +53,8 @@
           ];
 
           env = {
+            # DATABASE_URL will be constructed from .env variables in shellHook
+            # or will be set by .env file loaded via direnv
             RUST_BACKTRACE = "1";
             CARGO_TERM_COLOR = "always";
           };
@@ -60,6 +62,15 @@
           LD_LIBRARY_PATH = "${pkgs.openssl.out}/lib";
 
           shellHook = ''
+            # Construct DATABASE_URL from individual components if not already set
+            if [ -z "$DATABASE_URL" ] && [ -n "$DB_TYPE" ] && [ -n "$DB_HOST" ] && [ -n "$DB_PORT" ] && [ -n "$DB_USER" ] && [ -n "$DB_PASS" ] && [ -n "$DB_NAME" ]; then
+              export DATABASE_URL="$DB_TYPE://$DB_USER:$DB_PASS@$DB_HOST:$DB_PORT/$DB_NAME"
+              echo "🔗 Constructed DATABASE_URL from environment variables"
+            elif [ -z "$DATABASE_URL" ]; then
+              echo "⚠️  DATABASE_URL is not set and required components are missing"
+              echo "   Set DATABASE_URL or DB_TYPE, DB_HOST, DB_PORT, DB_USER, DB_PASS, DB_NAME in .env"
+            fi
+
             echo "========================================"
             echo "🎯 anytag-backend Development Environment"
             echo "========================================"

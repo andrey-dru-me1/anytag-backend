@@ -35,6 +35,7 @@ struct UploadedFile {
 }
 
 /// Image properties obtained from inspecting the uploaded bytes.
+#[derive(Debug)]
 struct ImageMetadata<'a> {
     mime_type: &'a str,
     extension: &'a str,
@@ -286,26 +287,32 @@ pub async fn upload_image(
     Ok(Json(image_dto))
 }
 
+/// Parses the numeric image ID from an image name.
+///
+/// The image name is the `user_images.id`, optionally followed by an
+/// extension (e.g. `"1.png"` or `"42"`). The portion before the first dot is
+/// parsed as the ID; the extension is ignored.
+fn parse_image_id(image_name: &str) -> Result<i32, ApiError> {
+    let id_str = match image_name.split('.').next() {
+        Some(id) => id,
+        None => image_name,
+    };
+
+    id_str.parse().map_err(|e| {
+        ApiError::builder()
+            .code(ApiErrorCode::PathParameterParseError)
+            .http_status(StatusCode::BAD_REQUEST)
+            .context(format!("'{id_str}' is not a valid image ID: {e}"))
+            .message("Valid image id must be provided")
+            .build()
+    })
+}
+
 async fn get_image_by_name(
     image_name: String,
     conn: &mut AsyncPgConnection,
 ) -> Result<(UserImage, ImageSource), ApiError> {
-    let id_str = match image_name.split('.').next() {
-        Some(id) => id,
-        None => &image_name,
-    };
-
-    let image_id: i32 = match id_str.parse() {
-        Ok(num) => num,
-        Err(e) => {
-            return Err(ApiError::builder()
-                .code(ApiErrorCode::PathParameterParseError)
-                .http_status(StatusCode::BAD_REQUEST)
-                .context(format!("'{id_str}' is not a valid image ID: {e}"))
-                .message("Valid image id must be provided")
-                .build());
-        }
-    };
+    let image_id = parse_image_id(&image_name)?;
 
     user_images
         .inner_join(image_sources::dsl::image_sources)
@@ -376,4 +383,204 @@ pub async fn get_image(
     let headers = prepare_headers(&image_source)?;
 
     Ok((headers, body_stream))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use image::ImageFormat;
+
+    // -----------------------------------------------------------------------
+    // image fixtures
+    // -----------------------------------------------------------------------
+
+    /// Encode a tiny 3x2 RGBA image in the given format.
+    fn encode_image(format: ImageFormat) -> Vec<u8> {
+        let mut img = image::RgbaImage::new(3, 2);
+        for (x, y, pixel) in img.enumerate_pixels_mut() {
+            *pixel = image::Rgba([x as u8, y as u8, 0, 255]);
+        }
+        let mut bytes = Cursor::new(Vec::new());
+        img.write_to(&mut bytes, format)
+            .expect("image encoding should succeed");
+        bytes.into_inner()
+    }
+
+    fn png_bytes() -> Vec<u8> {
+        encode_image(ImageFormat::Png)
+    }
+
+    fn webp_bytes() -> Vec<u8> {
+        encode_image(ImageFormat::WebP)
+    }
+
+    // -----------------------------------------------------------------------
+    // sha256_hex
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_sha256_hex_empty() {
+        assert_eq!(
+            sha256_hex(b""),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn test_sha256_hex_known_vector() {
+        assert_eq!(
+            sha256_hex(b"abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // inspect_image
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_inspect_image_png() {
+        let data = png_bytes();
+        let meta = inspect_image(&data).expect("valid png should be inspectable");
+        assert_eq!(meta.mime_type, "image/png");
+        assert_eq!(meta.extension, "png");
+        assert_eq!(meta.width, 3);
+        assert_eq!(meta.height, 2);
+    }
+
+    #[test]
+    fn test_inspect_image_webp() {
+        let data = webp_bytes();
+        let meta = inspect_image(&data).expect("valid webp should be inspectable");
+        assert_eq!(meta.mime_type, "image/webp");
+        assert_eq!(meta.extension, "webp");
+        assert_eq!(meta.width, 3);
+        assert_eq!(meta.height, 2);
+    }
+
+    #[test]
+    fn test_inspect_image_rejects_non_image_bytes() {
+        let err = inspect_image(b"hello, this is not an image").unwrap_err();
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(*err.error_code(), ApiErrorCode::FileUploadError);
+    }
+
+    #[test]
+    fn test_inspect_image_rejects_empty_bytes() {
+        let err = inspect_image(b"").unwrap_err();
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(*err.error_code(), ApiErrorCode::FileUploadError);
+    }
+
+    #[test]
+    fn test_inspect_image_rejects_truncated_png() {
+        // Keep only the PNG signature (8 bytes) plus a partial IHDR chunk so the
+        // format is still sniffable but the decoder cannot read the dimensions.
+        let mut data = png_bytes();
+        data.truncate(12);
+        let err = inspect_image(&data).unwrap_err();
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(*err.error_code(), ApiErrorCode::FileUploadError);
+    }
+
+    // -----------------------------------------------------------------------
+    // check_file_name_length
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_check_file_name_length_255_ok() {
+        let name: String = "a".repeat(255);
+        assert!(check_file_name_length(&name).is_ok());
+    }
+
+    #[test]
+    fn test_check_file_name_length_256_rejected() {
+        let name: String = "a".repeat(256);
+        let err = check_file_name_length(&name).unwrap_err();
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(*err.error_code(), ApiErrorCode::FileUploadError);
+    }
+
+    #[test]
+    fn test_check_file_name_length_empty_ok() {
+        assert!(check_file_name_length("").is_ok());
+    }
+
+    // -----------------------------------------------------------------------
+    // prepare_headers
+    // -----------------------------------------------------------------------
+
+    fn sample_image_source() -> ImageSource {
+        ImageSource {
+            file_sha256_hash: "a".repeat(64),
+            s3_path: "images/2026/08".to_string(),
+            extension: "png".to_string(),
+            file_size: 42,
+            mime_type: "image/png".to_string(),
+            bucket_name: "test-bucket".to_string(),
+            width: 3,
+            height: 2,
+        }
+    }
+
+    #[test]
+    fn test_prepare_headers_sets_content_type_and_cache_control() {
+        let headers = prepare_headers(&sample_image_source()).expect("headers should build");
+        assert_eq!(
+            headers
+                .get(header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("image/png")
+        );
+        assert_eq!(
+            headers
+                .get(header::CACHE_CONTROL)
+                .and_then(|v| v.to_str().ok()),
+            Some("public, max-age=2592000")
+        );
+    }
+
+    #[test]
+    fn test_prepare_headers_rejects_unparsable_mime_type() {
+        let mut source = sample_image_source();
+        source.mime_type = "image/png\nset-cookie: nope".to_string();
+        let err = prepare_headers(&source).unwrap_err();
+        assert_eq!(err.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(*err.error_code(), ApiErrorCode::S3StorageError);
+    }
+
+    // -----------------------------------------------------------------------
+    // parse_image_id
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_parse_image_id_plain() {
+        assert_eq!(parse_image_id("1").unwrap(), 1);
+        assert_eq!(parse_image_id("42").unwrap(), 42);
+    }
+
+    #[test]
+    fn test_parse_image_id_with_extension() {
+        assert_eq!(parse_image_id("1.png").unwrap(), 1);
+        assert_eq!(parse_image_id("42.webp").unwrap(), 42);
+    }
+
+    #[test]
+    fn test_parse_image_id_ignores_extra_dots() {
+        assert_eq!(parse_image_id("7.tar.png").unwrap(), 7);
+    }
+
+    #[test]
+    fn test_parse_image_id_rejects_non_numeric() {
+        let err = parse_image_id("abc.png").unwrap_err();
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(*err.error_code(), ApiErrorCode::PathParameterParseError);
+    }
+
+    #[test]
+    fn test_parse_image_id_rejects_empty() {
+        let err = parse_image_id("").unwrap_err();
+        assert_eq!(err.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(*err.error_code(), ApiErrorCode::PathParameterParseError);
+    }
 }

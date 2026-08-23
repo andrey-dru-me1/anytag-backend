@@ -217,14 +217,14 @@ mod tests {
     fn test_validate_email_invalid() {
         let err = validate_email("not-an-email").unwrap_err();
         assert_eq!(err.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(err.err_code().as_ref(), "INVALID_EMAIL");
+        assert_eq!(err.error_code().as_ref(), "INVALID_EMAIL");
     }
 
     #[test]
     fn test_validate_email_empty() {
         let err = validate_email("").unwrap_err();
         // An empty string is not a valid email
-        assert_eq!(err.err_code().as_ref(), "INVALID_EMAIL");
+        assert_eq!(err.error_code().as_ref(), "INVALID_EMAIL");
     }
 
     // -----------------------------------------------------------------------
@@ -249,7 +249,7 @@ mod tests {
     fn test_validate_password_strength_weak() {
         let err = validate_password_strength("12345678", "bob", "bob@example.com").unwrap_err();
         assert_eq!(err.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(err.err_code().as_ref(), "WEAK_PASSWORD");
+        assert_eq!(err.error_code().as_ref(), "WEAK_PASSWORD");
     }
 
     #[test]

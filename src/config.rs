@@ -38,6 +38,20 @@ impl Config {
             base_url: String::new(),
         }
     }
+
+    pub fn new(
+        db_pool: DbPool,
+        s3_client: aws_sdk_s3::Client,
+        s3_media_bucket: String,
+        base_url: String,
+    ) -> Self {
+        Self {
+            db_pool,
+            s3_client,
+            s3_media_bucket,
+            base_url,
+        }
+    }
 }
 
 pub async fn setup_config() -> anyhow::Result<Config> {

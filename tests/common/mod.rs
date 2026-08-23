@@ -4,6 +4,8 @@
 use anyhow::Context;
 use anytag_backend::config::{Config, DbPool};
 use anytag_backend::router::create_router;
+use aws_config::meta::region::RegionProviderChain;
+use aws_sdk_s3::config::{Credentials, Region};
 use axum::Router;
 use diesel::sql_query;
 use diesel_async::RunQueryDsl;
@@ -15,7 +17,6 @@ use diesel_async::pooled_connection::deadpool::Pool;
 ///
 /// Uses `max_size=1` to minimise resource usage in tests.
 fn test_db_pool() -> anyhow::Result<DbPool> {
-    dotenvy::dotenv().ok();
     let database_url =
         std::env::var("DATABASE_URL").context("DATABASE_URL must be set for integration tests")?;
 
@@ -62,6 +63,63 @@ impl TestTransaction {
     pub fn pool(&self) -> DbPool {
         self.pool.clone()
     }
+}
+
+/// Build an S3 client pointing at the local docker-compose SeaweedFS endpoint.
+///
+/// Reads `S3_BASE_URL`, `S3_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` from the
+/// environment when set, otherwise falls back to the docker-compose defaults.
+/// Ensures the configured bucket exists before returning.
+///
+/// `#[allow(dead_code)]` because other integration-test binaries that include
+/// this module (posts/tags/users) never use the S3 helpers.
+#[allow(dead_code)]
+async fn s3_client() -> anyhow::Result<(aws_sdk_s3::Client, String)> {
+    let base_url = std::env::var("S3_BASE_URL").context("S3_BASE_URL must be set")?;
+    let access_key_id = std::env::var("AWS_ACCESS_KEY_ID").context("S3_ACCESS_KEY must be set")?;
+    let secret_access_key =
+        std::env::var("AWS_SECRET_ACCESS_KEY").context("S3_SECRET_KEY must be set")?;
+    let bucket = std::env::var("S3_BUCKET").context("S3_BUCKET must be set")?;
+
+    let credentials = Credentials::new(&access_key_id, &secret_access_key, None, None, "manual");
+    let region_provider = RegionProviderChain::default_provider().or_else(Region::new("us-east-1"));
+    let shared_config = aws_config::from_env().region(region_provider).load().await;
+
+    let config = aws_sdk_s3::config::Builder::from(&shared_config)
+        .credentials_provider(credentials)
+        .endpoint_url(&base_url)
+        .force_path_style(true)
+        .build();
+    let client = aws_sdk_s3::Client::from_conf(config);
+
+    // Ensure the bucket exists (idempotent).
+    if client.head_bucket().bucket(&bucket).send().await.is_err() {
+        client
+            .create_bucket()
+            .bucket(&bucket)
+            .send()
+            .await
+            .context("Failed to create test S3 bucket")?;
+    }
+
+    Ok((client, bucket))
+}
+
+/// Build a `Config` backed by a real local SeaweedFS S3 endpoint and an
+/// isolated database transaction.
+///
+/// Intended for image-handler integration tests that must exercise the real
+/// `put_object`/`get_object` paths against the docker-compose SeaweedFS
+/// container ("without storing images in real storage").
+#[allow(dead_code)]
+pub async fn test_config_with_s3() -> anyhow::Result<(Config, TestTransaction)> {
+    dotenvy::dotenv()?;
+    let tx = TestTransaction::new().await?;
+    let pool = tx.pool();
+    let (client, bucket) = s3_client().await?;
+    let base_url = std::env::var("BASE_URL").context("BASE_URL must be set")?;
+    let config = Config::new(pool, client, bucket, base_url);
+    Ok((config, tx))
 }
 
 /// Convenience wrapper for integration tests that bundles a [`TestTransaction`]

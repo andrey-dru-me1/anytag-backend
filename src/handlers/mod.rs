@@ -19,7 +19,7 @@ use serde::Serialize;
 use std::borrow::Cow;
 use strum::Display;
 
-#[derive(Debug, strum::AsRefStr, Clone, Display)]
+#[derive(Debug, strum::AsRefStr, Clone, Display, PartialEq, Eq)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
 pub enum ApiErrorCode {
     WeakPassword,
@@ -55,7 +55,7 @@ impl ApiError {
 
     /// Returns a reference to the error code.
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn err_code(&self) -> &ApiErrorCode {
+    pub fn error_code(&self) -> &ApiErrorCode {
         &self.code
     }
 }

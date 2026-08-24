@@ -15,11 +15,11 @@ Users upload image files which are stored in an S3-compatible bucket. The applic
 
 A SeaweedFS container (see [`docker-compose.yaml`](../docker-compose.yaml)) exposes an S3-compatible API. The application talks to it exclusively through the AWS S3 SDK (`aws-sdk-s3`).
 
-| Port | Purpose |
-| ---- | ------- |
+| Port   | Purpose                         |
+| ------ | ------------------------------- |
 | `8333` | S3 access point (`S3_BASE_URL`) |
-| `9333` | SeaweedFS admin panel |
-| `8888` | SeaweedFS filer |
+| `9333` | SeaweedFS admin panel           |
+| `8888` | SeaweedFS filer                 |
 
 The application connects with the credentials and bucket configured in `.env`:
 
@@ -32,20 +32,20 @@ On startup ([`src/config.rs`](../src/config.rs)) the app checks whether the buck
 
 ### Object Key Layout
 
-Objects are stored under a content-addressed key derived from the file's SHA-256 digest:
+Objects are stored under a date-partitioned, content-addressed key. The first two path segments are the UTC upload date (`images/yyyy/mm`), and the file name is derived from the file's SHA-256 digest:
 
-```
-images/{sha256_hex}.{extension}
+```text
+images/yyyy/mm/{sha256_hex}.{extension}
 ```
 
-For example: `images/a1b2c3…9f0e.png`. Because the key is content-addressed, identical files map to the same object and can be shared across uploads.
+For example: `images/2026/08/a1b2c3…9f0e.png`. The `yyyy/mm` prefix is the upload year and month (in UTC, see [`src/handlers/images.rs`](../src/handlers/images.rs)) and groups objects into monthly folders. Deduplication is handled at the database level: `image_sources` is keyed on the SHA-256 hash, so re-uploading identical bytes reuses the existing row and does not write a new object — identical files therefore map to the same object and are shared across uploads.
 
 ## Database
 
 Two tables store media references (see [`migrations/2026-08-14-035230-0000_create_images`](../migrations/2026-08-14-035230-0000_create_images/up.sql)):
 
-- **`image_sources`** — deduplicated image content. Keyed by `s3_key` and stores `file_size`, `mime_type`, `bucket_name`, `width`, and `height` (all positive, enforced by CHECK constraints).
-- **`user_images`** — a user-uploaded image referencing an `image_sources` entry via `s3_key`, and records the uploader (`created_by`) and `original_file_name`.
+- **`image_sources`** — deduplicated image content, keyed by the `file_sha256_hash` (the object's SHA-256 digest, the primary key). Stores `s3_path` (`images/yyyy/mm`), `extension`, `file_size`, `mime_type`, `bucket_name`, `width`, and `height` (all positive, enforced by CHECK constraints). The full S3 object key is derived as `s3_path/{file_sha256_hash}.{extension}`.
+- **`user_images`** — a user-uploaded image referencing an `image_sources` entry via `file_sha256_hash` (foreign key), and records the uploader (`created_by`) and `original_file_name`.
 
 Each row in `user_images` has an `id` that is used as the public image name.
 
@@ -55,7 +55,7 @@ All media endpoints are under the `/api/v1` prefix. See [`src/router.rs`](../src
 
 ### Upload Image
 
-```
+```text
 POST /api/v1/media/images
 ```
 
@@ -82,7 +82,7 @@ The uploaded bytes are validated as an image (JPEG, PNG, or WebP). On success th
 
 ### Retrieve Image
 
-```
+```text
 GET /api/v1/media/images/{image_name}
 ```
 
@@ -99,12 +99,12 @@ The object is streamed back with:
 
 Media operations report the following `ApiErrorCode` values (see [`src/handlers/mod.rs`](../src/handlers/mod.rs)):
 
-| Code | Meaning |
-| ---- | ------- |
-| `FILE_UPLOAD_ERROR` | Malformed multipart request, unknown/corrupt image format, or S3 upload failure |
-| `PATH_PARAMETER_PARSE_ERROR` | Image name does not contain a valid numeric ID |
-| `S3_STORAGE_ERROR` | Failure loading an object from the bucket |
-| `DB_QUERY_ERROR` | Image not found or database insert/query failure |
+| Code                         | Meaning                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------- |
+| `FILE_UPLOAD_ERROR`          | Malformed multipart request, unknown/corrupt image format, or S3 upload failure |
+| `PATH_PARAMETER_PARSE_ERROR` | Image name does not contain a valid numeric ID                                  |
+| `S3_STORAGE_ERROR`           | Failure loading an object from the bucket                                       |
+| `DB_QUERY_ERROR`             | Image not found or database insert/query failure                                |
 
 ## See Also
 

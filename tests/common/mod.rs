@@ -1,170 +1,172 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 The Anytag Backend Authors
 
+#![allow(dead_code)]
+
+// todo: clean the mess up
+
 use anyhow::Context;
-use anytag_backend::config::{Config, DbPool};
-use anytag_backend::router::create_router;
-use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_s3::config::{Credentials, Region};
-use axum::Router;
-use diesel::sql_query;
-use diesel_async::RunQueryDsl;
-use diesel_async::pg::AsyncPgConnection;
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
-use diesel_async::pooled_connection::deadpool::Pool;
+use anytag_backend::{config, router};
 
-/// Create a test database pool from the `DATABASE_URL` environment variable.
-///
-/// Uses `max_size=1` to minimise resource usage in tests.
-fn test_db_pool() -> anyhow::Result<DbPool> {
-    let database_url =
-        std::env::var("DATABASE_URL").context("DATABASE_URL must be set for integration tests")?;
-
-    let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
-    Pool::builder(config)
-        .max_size(1)
-        .build()
-        .context("Failed to create test database pool")
+pub struct TestApp {
+    pub db_pool: config::DbPool,
+    router: axum::Router,
 }
 
-/// Transaction guard for test isolation.
-///
-/// On creation, begins a transaction on the pool's single connection.
-/// When dropped, rolls back the transaction, discarding all changes made
-/// during the test.
-///
-/// Tests obtain a pool handle via [`TestTransaction::pool`] and pass it to
-/// [`create_router`]. Because the pool is configured with `max_size=1`, every
-/// call to `pool.get()` returns the same underlying connection — the one
-/// inside this transaction — so all handler operations remain within the
-/// transaction boundary. No test data is ever persisted to the database.
-pub struct TestTransaction {
-    pool: DbPool,
-}
-
-impl TestTransaction {
-    /// Create a new test transaction.
+impl TestApp {
     pub async fn new() -> anyhow::Result<Self> {
-        let pool = test_db_pool()?;
-        let mut conn = pool
-            .get()
-            .await
-            .context("Failed to get connection for test transaction")?;
-        sql_query("BEGIN")
-            .execute(&mut conn)
-            .await
-            .context("Failed to begin test transaction")?;
-        // Drop the connection — it returns to the pool with the transaction active.
-        drop(conn);
-        Ok(Self { pool })
+        let config = config::Config {
+            db_pool: db::setup_test_db_pool().await?,
+            s3_client: s3::mock_s3_client(),
+            s3_media_bucket: String::new(),
+            base_url: String::new(),
+        };
+        Ok(Self {
+            db_pool: config.db_pool.clone(),
+            router: router::create_router(config),
+        })
     }
 
-    /// Return a clone of the pool for use in test handlers.
-    pub fn pool(&self) -> DbPool {
-        self.pool.clone()
-    }
-}
+    pub async fn with_temporary_s3_bucket<Fut, E>(
+        test_logic: impl FnOnce(Self) -> Fut,
+    ) -> anyhow::Result<()>
+    where
+        Fut: Future<Output = Result<(), E>>,
+        E: Into<anyhow::Error> + Send + Sync + 'static,
+    {
+        let s3_test_client = s3::S3TestClient::from_env().await?;
+        let config = config::Config {
+            db_pool: db::setup_test_db_pool().await?,
+            s3_client: s3_test_client.client.clone(),
+            s3_media_bucket: s3_test_client.bucket_name.clone(),
+            base_url: String::new(),
+        };
+        let test_app = Self {
+            db_pool: config.db_pool.clone(),
+            router: router::create_router(config),
+        };
 
-/// Build an S3 client pointing at the local docker-compose SeaweedFS endpoint.
-///
-/// Reads `S3_BASE_URL`, `S3_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` from the
-/// environment when set, otherwise falls back to the docker-compose defaults.
-/// Ensures the configured bucket exists before returning.
-///
-/// `#[allow(dead_code)]` because other integration-test binaries that include
-/// this module (posts/tags/users) never use the S3 helpers.
-#[allow(dead_code)]
-async fn s3_client() -> anyhow::Result<(aws_sdk_s3::Client, String)> {
-    let base_url = std::env::var("S3_BASE_URL").context("S3_BASE_URL must be set")?;
-    let access_key_id = std::env::var("AWS_ACCESS_KEY_ID").context("S3_ACCESS_KEY must be set")?;
-    let secret_access_key =
-        std::env::var("AWS_SECRET_ACCESS_KEY").context("S3_SECRET_KEY must be set")?;
-    let bucket = std::env::var("S3_BUCKET").context("S3_BUCKET must be set")?;
+        let result = test_logic(test_app).await;
 
-    let credentials = Credentials::new(&access_key_id, &secret_access_key, None, None, "manual");
-    let region_provider = RegionProviderChain::default_provider().or_else(Region::new("us-east-1"));
-    let shared_config = aws_config::from_env().region(region_provider).load().await;
-
-    let config = aws_sdk_s3::config::Builder::from(&shared_config)
-        .credentials_provider(credentials)
-        .endpoint_url(&base_url)
-        .force_path_style(true)
-        .build();
-    let client = aws_sdk_s3::Client::from_conf(config);
-
-    // Ensure the bucket exists (idempotent).
-    if client.head_bucket().bucket(&bucket).send().await.is_err() {
-        client
-            .create_bucket()
-            .bucket(&bucket)
+        s3_test_client
+            .client
+            .delete_bucket()
+            .bucket(&s3_test_client.bucket_name)
             .send()
             .await
-            .context("Failed to create test S3 bucket")?;
+            .context(format!(
+                "Could not delete bucket {}",
+                s3_test_client.bucket_name
+            ))?;
+
+        result.map_err(Into::into)
     }
 
-    Ok((client, bucket))
-}
-
-/// Build a `Config` backed by a real local SeaweedFS S3 endpoint and an
-/// isolated database transaction.
-///
-/// Intended for image-handler integration tests that must exercise the real
-/// `put_object`/`get_object` paths against the docker-compose SeaweedFS
-/// container ("without storing images in real storage").
-#[allow(dead_code)]
-pub async fn test_config_with_s3() -> anyhow::Result<(Config, TestTransaction)> {
-    dotenvy::dotenv()?;
-    let tx = TestTransaction::new().await?;
-    let pool = tx.pool();
-    let (client, bucket) = s3_client().await?;
-    let base_url = std::env::var("BASE_URL").context("BASE_URL must be set")?;
-    let config = Config::new(pool, client, bucket, base_url);
-    Ok((config, tx))
-}
-
-/// Convenience wrapper for integration tests that bundles a [`TestTransaction`]
-/// and a pre-built router.
-///
-/// # Example
-///
-/// ```ignore
-/// use common::TestApp;
-///
-/// #[tokio::test]
-/// async fn test_something() -> anyhow::Result<()> {
-///     let test_app = TestApp::new().await?;
-///     let app = test_app.router();
-///     // … use `app` as an axum::Router …
-///     Ok(())
-/// }
-/// ```
-#[allow(dead_code)]
-pub struct TestApp {
-    #[allow(dead_code)]
-    tx: TestTransaction,
-    app: Router,
-}
-
-#[allow(dead_code)]
-impl TestApp {
-    /// Create a new `TestApp` with an isolated database transaction and a router.
-    pub async fn new() -> anyhow::Result<Self> {
-        let tx = TestTransaction::new().await?;
-        let config = Config::from_db_pool(tx.pool());
-        let app = create_router(config);
-        Ok(Self { tx, app })
+    pub fn router(&self) -> axum::Router {
+        self.router.clone()
     }
+}
 
-    /// Return a clone of the inner router.
+mod db {
+    use anyhow::Context;
+    use anytag_backend::config::{DbPool, load_env};
+    use diesel_async::AsyncConnection;
+    use diesel_async::pg::AsyncPgConnection;
+    use diesel_async::pooled_connection::deadpool::Pool;
+    use diesel_async::pooled_connection::{AsyncDieselConnectionManager, ManagerConfig};
+
+    /// Create a test database pool from the `DATABASE_URL` environment variable.
     ///
-    /// Cloning an axum [`Router`] is cheap (it shares internal state via `Arc`).
-    pub fn router(&self) -> Router {
-        self.app.clone()
+    /// Uses `max_size=1` to minimise resource usage in tests.
+    pub async fn setup_test_db_pool() -> anyhow::Result<DbPool> {
+        let database_url = load_env("DATABASE_URL")?;
+
+        let mut manager_config = ManagerConfig::<AsyncPgConnection>::default();
+        manager_config.custom_setup = Box::new(|url| {
+            Box::pin(async move {
+                let mut conn = AsyncPgConnection::establish(url)
+                    .await
+                    .map_err(|e| diesel::result::ConnectionError::BadConnection(e.to_string()))?;
+
+                conn.begin_test_transaction()
+                    .await
+                    .map_err(|e| diesel::result::ConnectionError::CouldntSetupConfiguration(e))?;
+
+                Ok(conn)
+            })
+        });
+
+        let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new_with_config(
+            database_url,
+            manager_config,
+        );
+        Pool::builder(config)
+            .max_size(1)
+            .build()
+            .context("Failed to create test database pool")
     }
 }
 
-// No custom `Drop` needed — `Pool` closes its connections on drop, and
-// PostgreSQL automatically rolls back any uncommitted transaction when the
-// underlying TCP connection is closed.  When the `TestTransaction` (and all
-// cloned pool handles) go out of scope, the pool is dropped, connections are
-// closed, and the transaction is rolled back automatically.
+mod s3 {
+    use anyhow::Context;
+    use anytag_backend::config::load_env;
+    use aws_config::meta::region::RegionProviderChain;
+    use aws_sdk_s3::config::{Credentials, Region};
+    use uuid::Uuid;
+
+    pub fn mock_s3_client() -> aws_sdk_s3::Client {
+        let s3_config = aws_sdk_s3::config::Builder::new()
+            .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
+            .build();
+        aws_sdk_s3::Client::from_conf(s3_config)
+    }
+
+    pub struct S3TestClient {
+        pub client: aws_sdk_s3::Client,
+        pub bucket_name: String,
+    }
+
+    impl S3TestClient {
+        /// Build an S3 client pointing at the local docker-compose SeaweedFS endpoint.
+        ///
+        /// Reads `S3_BASE_URL`, `S3_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` from the
+        /// environment when set, otherwise falls back to the docker-compose defaults.
+        /// Ensures the configured bucket exists before returning.
+        ///
+        /// this module (posts/tags/users) never use the S3 helpers.
+        pub async fn from_env() -> anyhow::Result<Self> {
+            let base_url = load_env("S3_BASE_URL")?;
+            let access_key_id = load_env("AWS_ACCESS_KEY_ID")?;
+            let secret_access_key = load_env("AWS_SECRET_ACCESS_KEY")?;
+            let bucket = format!("test-bucket-{}", Uuid::new_v4());
+
+            let credentials =
+                Credentials::new(&access_key_id, &secret_access_key, None, None, "manual");
+            let region_provider =
+                RegionProviderChain::default_provider().or_else(Region::new("us-east-1"));
+            let shared_config = aws_config::from_env().region(region_provider).load().await;
+
+            let config = aws_sdk_s3::config::Builder::from(&shared_config)
+                .credentials_provider(credentials)
+                .endpoint_url(&base_url)
+                .force_path_style(true)
+                .build();
+            let client = aws_sdk_s3::Client::from_conf(config);
+
+            // Ensure the bucket exists (idempotent).
+            if client.head_bucket().bucket(&bucket).send().await.is_err() {
+                client
+                    .create_bucket()
+                    .bucket(&bucket)
+                    .send()
+                    .await
+                    .context("Failed to create test S3 bucket")?;
+            }
+
+            Ok(Self {
+                client,
+                bucket_name: bucket,
+            })
+        }
+    }
+}

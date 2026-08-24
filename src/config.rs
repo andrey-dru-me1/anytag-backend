@@ -22,87 +22,56 @@ pub struct Config {
 }
 
 impl Config {
-    /// Build a `Config` carrying only a database pool, with a minimal S3 client.
-    ///
-    /// Intended for tests and DB-only usage where no S3 operations are performed.
-    /// The S3 client is constructed with default (unconfigured) credentials; any
-    /// S3 call on it will fail, which is acceptable for the current DB-only tests.
-    pub fn from_db_pool(db_pool: DbPool) -> Self {
-        let s3_config = aws_sdk_s3::config::Builder::new()
-            .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
-            .build();
-        Self {
-            db_pool,
-            s3_client: aws_sdk_s3::Client::from_conf(s3_config),
-            s3_media_bucket: String::new(),
-            base_url: String::new(),
-        }
-    }
+    pub async fn from_env() -> anyhow::Result<Config> {
+        dotenv().ok();
 
-    pub fn new(
-        db_pool: DbPool,
-        s3_client: aws_sdk_s3::Client,
-        s3_media_bucket: String,
-        base_url: String,
-    ) -> Self {
-        Self {
-            db_pool,
+        let (s3_client, s3_media_bucket) = Self::setup_s3_client().await?;
+        let base_url = load_env("BASE_URL")?;
+        Ok(Config {
+            db_pool: Self::setup_database()?,
             s3_client,
             s3_media_bucket,
             base_url,
+        })
+    }
+
+    fn setup_database() -> anyhow::Result<DbPool> {
+        let db_url = load_env("DATABASE_URL")?;
+        let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
+        Pool::builder(config)
+            .build()
+            .context("Failed to create database connection pool")
+    }
+
+    async fn setup_s3_client() -> anyhow::Result<(aws_sdk_s3::Client, String)> {
+        let access_key_id = load_env("AWS_ACCESS_KEY_ID")?;
+        let secret_access_key = load_env("AWS_SECRET_ACCESS_KEY")?;
+        let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "manual");
+
+        let region_provider = RegionProviderChain::default_provider().or_else(Region::new("us-east-1"));
+        let shared_config = aws_config::from_env().region(region_provider).load().await;
+
+        let base_url = load_env("S3_BASE_URL")?;
+        let config = aws_sdk_s3::config::Builder::from(&shared_config)
+            .credentials_provider(credentials)
+            .endpoint_url(base_url)
+            .force_path_style(true)
+            .build();
+        let client = aws_sdk_s3::Client::from_conf(config);
+
+        let bucket_name = load_env("S3_BUCKET")?;
+        let existing_bucket_result = client.head_bucket().bucket(&bucket_name).send().await;
+        if existing_bucket_result.is_err() {
+            tracing::info!("Creating new bucket '{bucket_name}'");
+            client.create_bucket().bucket(&bucket_name).send().await?;
+        } else {
+            tracing::info!("Bucket '{bucket_name}' already exists");
         }
+
+        Ok((client, bucket_name))
     }
 }
 
-pub async fn setup_config() -> anyhow::Result<Config> {
-    dotenv().ok();
-
-    let (s3_client, s3_media_bucket) = setup_s3_client().await?;
-    let base_url = load_env("BASE_URL")?;
-    Ok(Config {
-        db_pool: setup_database()?,
-        s3_client,
-        s3_media_bucket,
-        base_url,
-    })
-}
-
-fn setup_database() -> anyhow::Result<DbPool> {
-    let db_url = load_env("DATABASE_URL")?;
-    let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
-    Pool::builder(config)
-        .build()
-        .context("Failed to create database connection pool")
-}
-
-async fn setup_s3_client() -> anyhow::Result<(aws_sdk_s3::Client, String)> {
-    let access_key_id = load_env("AWS_ACCESS_KEY_ID")?;
-    let secret_access_key = load_env("AWS_SECRET_ACCESS_KEY")?;
-    let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "manual");
-
-    let region_provider = RegionProviderChain::default_provider().or_else(Region::new("us-east-1"));
-    let shared_config = aws_config::from_env().region(region_provider).load().await;
-
-    let base_url = load_env("S3_BASE_URL")?;
-    let config = aws_sdk_s3::config::Builder::from(&shared_config)
-        .credentials_provider(credentials)
-        .endpoint_url(base_url)
-        .force_path_style(true)
-        .build();
-    let client = aws_sdk_s3::Client::from_conf(config);
-
-    let bucket_name = load_env("S3_BUCKET")?;
-    let existing_bucket_result = client.head_bucket().bucket(&bucket_name).send().await;
-    if existing_bucket_result.is_err() {
-        tracing::info!("Creating new bucket '{bucket_name}'");
-        client.create_bucket().bucket(&bucket_name).send().await?;
-    } else {
-        tracing::info!("Bucket '{bucket_name}' already exists");
-    }
-
-    Ok((client, bucket_name))
-}
-
-fn load_env(var: &'static str) -> anyhow::Result<String> {
+pub fn load_env(var: &'static str) -> anyhow::Result<String> {
     env::var(var).context(format!("{var} must be set in .env or environment"))
 }

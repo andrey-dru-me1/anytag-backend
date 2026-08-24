@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 The Anytag Backend Authors
 
-mod health;
-mod images;
-mod posts;
-mod tags;
-mod users;
+pub mod health;
+pub mod images;
+pub mod posts;
+pub mod tags;
+pub mod users;
 
 use diesel_async::pooled_connection::deadpool;
-pub use health::*;
-pub use images::*;
-pub use posts::*;
-pub use tags::*;
-pub use users::*;
 
 use axum::{Json, http::StatusCode, response::IntoResponse};
 use serde::Serialize;

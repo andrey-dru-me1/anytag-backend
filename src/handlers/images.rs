@@ -28,7 +28,6 @@ use crate::{
     },
 };
 
-/// A `file` field extracted from the multipart request.
 struct UploadedFile {
     original_file_name: Option<String>,
     data: Bytes,
@@ -240,30 +239,26 @@ pub async fn upload_image(
     let uploaded = extract_file_field(&mut multipart).await?;
     let file_size = uploaded.data.len() as i64;
     let file_sha256_hash = &sha256_hex(&uploaded.data);
-    let ImageMetadata {
-        mime_type,
-        extension,
-        width,
-        height,
-    } = inspect_image(&uploaded.data)?;
+    let image_metadata = inspect_image(&uploaded.data)?;
     let original_file_name = uploaded
         .original_file_name
-        .unwrap_or_else(|| file_sha256_hash.clone());
-    check_file_name_length(&original_file_name)?;
+        .as_deref()
+        .unwrap_or(file_sha256_hash);
+    check_file_name_length(original_file_name)?;
 
     let s3_path = &Utc::now().format("images/%Y/%m").to_string();
     let new_image_source = NewImageSource {
         file_size,
         s3_path,
         file_sha256_hash,
-        extension,
-        mime_type,
+        extension: image_metadata.extension,
+        mime_type: image_metadata.mime_type,
         bucket_name: &config.s3_media_bucket,
-        width,
-        height,
+        width: image_metadata.width,
+        height: image_metadata.height,
     };
     let new_user_image = NewUserImage {
-        original_file_name: &original_file_name,
+        original_file_name,
         file_sha256_hash,
         created_by: 1, // todo: change once jwt is implemented
     };
@@ -281,7 +276,7 @@ pub async fn upload_image(
         new_image_source,
         user_image,
         &format!("{}/api/v1/media/images", config.base_url),
-        extension,
+        image_metadata.extension,
     );
 
     Ok(Json(image_dto))
@@ -386,7 +381,7 @@ pub async fn get_image(
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use image::ImageFormat;
 
@@ -395,7 +390,7 @@ mod tests {
     // -----------------------------------------------------------------------
 
     /// Encode a tiny 3x2 RGBA image in the given format.
-    fn encode_image(format: ImageFormat) -> Vec<u8> {
+    pub fn encode_image(format: ImageFormat) -> Vec<u8> {
         let mut img = image::RgbaImage::new(3, 2);
         for (x, y, pixel) in img.enumerate_pixels_mut() {
             *pixel = image::Rgba([x as u8, y as u8, 0, 255]);
@@ -406,11 +401,11 @@ mod tests {
         bytes.into_inner()
     }
 
-    fn png_bytes() -> Vec<u8> {
+    pub fn png_bytes() -> Vec<u8> {
         encode_image(ImageFormat::Png)
     }
 
-    fn webp_bytes() -> Vec<u8> {
+    pub fn webp_bytes() -> Vec<u8> {
         encode_image(ImageFormat::WebP)
     }
 

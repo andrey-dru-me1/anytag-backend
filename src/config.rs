@@ -48,7 +48,8 @@ impl Config {
         let secret_access_key = load_env("AWS_SECRET_ACCESS_KEY")?;
         let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "manual");
 
-        let region_provider = RegionProviderChain::default_provider().or_else(Region::new("us-east-1"));
+        let region_provider =
+            RegionProviderChain::default_provider().or_else(Region::new("us-east-1"));
         let shared_config = aws_config::from_env().region(region_provider).load().await;
 
         let base_url = load_env("S3_BASE_URL")?;

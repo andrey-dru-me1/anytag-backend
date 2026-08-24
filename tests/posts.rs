@@ -59,7 +59,10 @@ async fn insert_user(conn: &mut diesel_async::AsyncPgConnection) -> anyhow::Resu
 async fn test_list_posts_returns_ok() -> anyhow::Result<()> {
     let test_app = TestApp::new().await?;
 
-    let response = test_app.router().oneshot(json_get("/api/v1/posts")?).await?;
+    let response = test_app
+        .router()
+        .oneshot(json_get("/api/v1/posts")?)
+        .await?;
     assert_eq!(response.status(), StatusCode::OK);
 
     let json_body = response_json(response).await?;
@@ -73,7 +76,11 @@ async fn test_list_posts_includes_inserted_data() -> anyhow::Result<()> {
 
     // Insert a user and some posts within the transaction.
     {
-        let mut conn = test_app.db_pool.get().await.context("Failed to get connection")?;
+        let mut conn = test_app
+            .db_pool
+            .get()
+            .await
+            .context("Failed to get connection")?;
         let user_id = insert_user(&mut conn).await?;
 
         let new_posts = vec![
@@ -94,7 +101,10 @@ async fn test_list_posts_includes_inserted_data() -> anyhow::Result<()> {
             .context("Failed to insert test posts")?;
     }
 
-    let response = test_app.router().oneshot(json_get("/api/v1/posts")?).await?;
+    let response = test_app
+        .router()
+        .oneshot(json_get("/api/v1/posts")?)
+        .await?;
     assert_eq!(response.status(), StatusCode::OK);
 
     let json_body = response_json(response).await?;

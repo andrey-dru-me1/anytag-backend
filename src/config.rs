@@ -3,7 +3,11 @@
 
 use anyhow::Context;
 use aws_config::meta::region::RegionProviderChain;
-use aws_sdk_s3::config::{Credentials, Region};
+use aws_sdk_s3::{
+    config::{Credentials, Region},
+    error::SdkError,
+    operation::head_bucket::HeadBucketError,
+};
 use diesel_async::{
     pg::AsyncPgConnection,
     pooled_connection::{AsyncDieselConnectionManager, deadpool::Pool},
@@ -61,12 +65,17 @@ impl Config {
         let client = aws_sdk_s3::Client::from_conf(config);
 
         let bucket_name = load_env("S3_BUCKET")?;
-        let existing_bucket_result = client.head_bucket().bucket(&bucket_name).send().await;
-        if existing_bucket_result.is_err() {
-            tracing::info!("Creating new bucket '{bucket_name}'");
-            client.create_bucket().bucket(&bucket_name).send().await?;
-        } else {
-            tracing::info!("Bucket '{bucket_name}' already exists");
+        match client.head_bucket().bucket(&bucket_name).send().await {
+            Ok(_) => {
+                tracing::info!("Bucket '{bucket_name}' already exists");
+            }
+            Err(SdkError::ServiceError(e)) if let &HeadBucketError::NotFound(_) = e.err() => {
+                tracing::info!("Creating new bucket '{bucket_name}'");
+                client.create_bucket().bucket(&bucket_name).send().await?;
+            }
+            Err(e) => {
+                return Err(e.into());
+            }
         }
 
         Ok((client, bucket_name))

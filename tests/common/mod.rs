@@ -3,8 +3,6 @@
 
 #![allow(dead_code)]
 
-// todo: clean the mess up
-
 use anyhow::Context;
 use anytag_backend::{config, router};
 

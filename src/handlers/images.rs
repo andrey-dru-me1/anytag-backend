@@ -381,7 +381,7 @@ pub async fn get_image(
 }
 
 #[cfg(test)]
-pub mod tests {
+mod tests {
     use super::*;
     use image::ImageFormat;
 
@@ -390,7 +390,7 @@ pub mod tests {
     // -----------------------------------------------------------------------
 
     /// Encode a tiny 3x2 RGBA image in the given format.
-    pub fn encode_image(format: ImageFormat) -> Vec<u8> {
+    fn encode_image(format: ImageFormat) -> Vec<u8> {
         let mut img = image::RgbaImage::new(3, 2);
         for (x, y, pixel) in img.enumerate_pixels_mut() {
             *pixel = image::Rgba([x as u8, y as u8, 0, 255]);
@@ -401,11 +401,11 @@ pub mod tests {
         bytes.into_inner()
     }
 
-    pub fn png_bytes() -> Vec<u8> {
+    fn png_bytes() -> Vec<u8> {
         encode_image(ImageFormat::Png)
     }
 
-    pub fn webp_bytes() -> Vec<u8> {
+    fn webp_bytes() -> Vec<u8> {
         encode_image(ImageFormat::WebP)
     }
 

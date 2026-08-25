@@ -39,7 +39,6 @@ async fn response_json(response: axum::response::Response) -> anyhow::Result<Val
 #[tokio::test]
 async fn test_create_user_success() -> anyhow::Result<()> {
     let test_app = TestApp::new().await?;
-    let app = test_app.router();
     let email = "test_create_success@example.com";
 
     let body = json!({
@@ -48,7 +47,10 @@ async fn test_create_user_success() -> anyhow::Result<()> {
         "password": "CorrectHorseBatteryStaple99!"
     });
 
-    let response = app.oneshot(json_post("/api/v1/users", body)?).await?;
+    let response = test_app
+        .router()
+        .oneshot(json_post("/api/v1/users", body)?)
+        .await?;
     assert_eq!(response.status(), StatusCode::OK);
 
     let json_body = response_json(response).await?;
@@ -61,7 +63,6 @@ async fn test_create_user_success() -> anyhow::Result<()> {
 #[tokio::test]
 async fn test_create_user_invalid_email() -> anyhow::Result<()> {
     let test_app = TestApp::new().await?;
-    let app = test_app.router();
 
     let body = json!({
         "name": "Bad Email",
@@ -69,7 +70,10 @@ async fn test_create_user_invalid_email() -> anyhow::Result<()> {
         "password": "CorrectHorseBatteryStaple99!"
     });
 
-    let response = app.oneshot(json_post("/api/v1/users", body)?).await?;
+    let response = test_app
+        .router()
+        .oneshot(json_post("/api/v1/users", body)?)
+        .await?;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let json_body = response_json(response).await?;
@@ -80,7 +84,6 @@ async fn test_create_user_invalid_email() -> anyhow::Result<()> {
 #[tokio::test]
 async fn test_create_user_weak_password() -> anyhow::Result<()> {
     let test_app = TestApp::new().await?;
-    let app = test_app.router();
 
     let body = json!({
         "name": "Weak PW",
@@ -88,7 +91,10 @@ async fn test_create_user_weak_password() -> anyhow::Result<()> {
         "password": "12345678"
     });
 
-    let response = app.oneshot(json_post("/api/v1/users", body)?).await?;
+    let response = test_app
+        .router()
+        .oneshot(json_post("/api/v1/users", body)?)
+        .await?;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let json_body = response_json(response).await?;

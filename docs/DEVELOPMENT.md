@@ -113,6 +113,11 @@ cargo test test_name
 # Run tests automatically on file changes
 cargo watch -x test
 
+# Test coverage (requires cargo-llvm-cov, included in the Nix environment)
+cargo llvm-cov                      # Print a coverage summary to the terminal
+cargo llvm-cov --open               # Open an HTML coverage report in the browser
+cargo llvm-cov --lcov --output-path lcov.info   # Generate an LCOV report for editors/IDEs
+
 # Build for release
 cargo build --release
 
@@ -126,13 +131,11 @@ The project follows a modular Rust web application architecture with clear separ
 
 - **Application entry point** (`src/main.rs`) - Sets up the web server and routes
 - **Configuration** (`src/config.rs`) - Builds the async database pool and the S3 client, auto-creates the media bucket on startup
-- **Database models** (`src/models/`) - Define data structures and relationships (including `image_sources` and `user_images`)
-- **Request/response DTOs** (`src/dto/`) - Data transfer objects for API boundaries (including image DTOs)
-- **HTTP handlers** (`src/handlers/`) - Process incoming requests and return responses (including media upload/retrieval)
+- **Database models** (`src/models/`) - Define data structures and relationships
+- **Request/response DTOs** (`src/dto/`) - Data transfer objects for API boundaries
+- **HTTP handlers** (`src/handlers/`) - Process incoming requests and return responses
 - **Database layer** - Connection management via `diesel-async` and deadpool (see `src/config.rs`)
-- **Routing** (`src/router.rs`) - URL routing configuration (includes `/api/v1/media/images` routes)
-
-For details on the media subsystem and object storage layout, see [MEDIA.md](./MEDIA.md).
+- **Routing** (`src/router.rs`) - URL routing configuration
 
 For the most current and detailed structure, please refer to the source code directly as the project evolves frequently.
 
@@ -160,6 +163,7 @@ See [MEDIA.md](./MEDIA.md) for the full media storage architecture.
 
 ### Constructed Variables
 
+- `DATABASE_URL` - Automatically constructed from the above components as: `${DB_TYPE}$://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${DB_HOST}$:${DB_PORT}/${POSTGRES_DB}`
 - `RUST_BACKTRACE=1` (full backtraces on panic)
 - `CARGO_TERM_COLOR=always` (colored output)
 

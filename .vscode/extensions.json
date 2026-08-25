@@ -10,8 +10,7 @@
     "rust-lang.rust-analyzer",  // Rust language server
 
     // === Optional Extensions ===
-    "fill-labs.dependi",        // Visualizes dependency graphs
-    "mkhl.direnv",              // Manages environment variables
-    "redhat.vscode-yaml"        // Provides YAML validation and formatting
+    "redhat.vscode-yaml",       // Provides YAML validation and formatting
+    "ryanluker.vscode-coverage-gutters" // Displays test coverage from lcov.info
   ]
 }

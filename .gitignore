@@ -24,6 +24,9 @@ target/
 *.profraw
 *.profdata
 
+# Generated coverage report (see cargo llvm-cov)
+lcov.info
+
 # Rust documentation
 /target/doc/
 

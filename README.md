@@ -107,6 +107,11 @@ cargo clippy        # Lint code
 cargo watch -x run   # Development server with hot reload (restarts on save)
 cargo watch -x test  # Run tests automatically on file changes
 
+# Test coverage
+cargo llvm-cov --lcov --output-path lcov.info  # Generate an LCOV report for editors/IDEs
+cargo llvm-cov --open                           # Open an HTML coverage report in the browser
+cargo llvm-cov                                  # Print a coverage summary to the terminal
+
 # Database
 diesel migration run    # Run pending migrations
 diesel migration revert # Revert last migration

@@ -16,8 +16,30 @@ Recommended extensions for Rust development with Nix:
 - **DockerDX** – Docker integration
 - **Even Better TOML** – TOML file support
 - **YAML** – YAML file support
+- **Coverage Gutters** – Test coverage highlighting in the editor
 
 Open the project — VS Code should detect the Nix environment automatically.
+
+### Viewing Test Coverage
+
+Test coverage is measured with [`cargo-llvm-cov`](https://github.com/taiki-e/cargo-llvm-cov) (included in the Nix environment). The **Coverage Gutters** extension (listed in [`.vscode/extensions.json`](../.vscode/extensions.json)) renders the coverage directly in the editor.
+
+1. Generate an LCOV report (the format Coverage Gutters reads):
+
+   ```bash
+   cargo llvm-cov --lcov --output-path lcov.info
+   ```
+
+2. In VS Code, run **Coverage Gutters: Watch** (or **Coverage Gutters: Display Coverage**) from the command palette.
+
+3. Alternatively, view coverage without the editor:
+
+   ```bash
+   cargo llvm-cov          # Coverage summary in the terminal
+   cargo llvm-cov --open   # HTML report in the browser
+   ```
+
+`lcov.info` is a generated artifact and is listed in `.gitignore`, so it is never committed.
 
 ## Zed
 

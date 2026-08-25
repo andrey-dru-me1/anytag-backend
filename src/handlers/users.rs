@@ -32,8 +32,8 @@ fn hash_password(password: &str) -> Result<String, String> {
 
 /// Validate email format.
 ///
-/// Returns `Ok(())` if the email is valid, or a `HandlerErr` with
-/// [`ErrCode::InvalidEmail`] and status [`StatusCode::UNPROCESSABLE_ENTITY`].
+/// Returns `Ok(())` if the email is valid, or an `ApiError` with [`ApiErrorCode::InvalidEmail`]
+/// and status [`StatusCode::UNPROCESSABLE_ENTITY`].
 fn validate_email(input: &str) -> Result<(), ApiError> {
     if !EmailAddress::is_valid(input) {
         return Err(ApiError::builder()
@@ -49,7 +49,7 @@ fn validate_email(input: &str) -> Result<(), ApiError> {
 /// Validate password strength using zxcvbn.
 ///
 /// Returns `Ok(())` if the password scores at least [`Score::Three`],
-/// or a `HandlerErr` with [`ErrCode::WeakPassword`] and
+/// or an `ApiError` with [`ApiErrorCode::WeakPassword`] and
 /// status [`StatusCode::UNPROCESSABLE_ENTITY`].
 fn validate_password_strength(
     password: &str,

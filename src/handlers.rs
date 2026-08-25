@@ -63,13 +63,13 @@ impl IntoResponse for ApiError {
         );
 
         #[derive(Serialize, Debug)]
-        struct HandlerErrBody<'a> {
+        struct ApiErrorBody<'a> {
             code: &'a str,
             #[serde(skip_serializing_if = "Option::is_none")]
             message: Option<Cow<'static, str>>,
         }
 
-        let body = HandlerErrBody {
+        let body = ApiErrorBody {
             code: self.code.as_ref(),
             message: self.message,
         };

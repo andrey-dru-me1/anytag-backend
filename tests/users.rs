@@ -125,7 +125,7 @@ async fn test_create_user_duplicate_email() -> anyhow::Result<()> {
         .router()
         .oneshot(json_post("/api/v1/users", body)?)
         .await?;
-    // DB_QUERY_ERROR via From<(ErrCode, String)> defaults to 500
+    // DB_QUERY_ERROR via From<(ApiErrorCode, String)> defaults to 500
     assert_eq!(response2.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
     let json_body = response_json(response2).await?;

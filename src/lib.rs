@@ -4,7 +4,7 @@
 pub mod config;
 pub mod dto;
 pub mod handlers;
+pub mod jwt;
 pub mod models;
 pub mod router;
 pub mod schema;
-pub mod jwt;

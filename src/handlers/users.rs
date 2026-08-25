@@ -14,7 +14,8 @@ use crate::dto::{
 };
 use crate::handlers::{ApiError, ApiErrorCode};
 use crate::jwt::{
-    TokenType, create_access_token, create_refresh_token, hash_token, verify_token,
+    TokenType, create_access_token, create_refresh_token, hash_token, refresh_token_ttl_days,
+    verify_token,
 };
 use crate::models::{NewUser, User};
 use crate::schema::users::dsl::*;
@@ -193,7 +194,7 @@ pub async fn login_user(
             .http_status(StatusCode::INTERNAL_SERVER_ERROR)
             .code(ApiErrorCode::JwtCreationError)
             .context(format!("failed to create access token: {}", e))
-            .message("Failed to create access token")
+            .message("Authentication service error")
             .build()
     })?;
 
@@ -202,13 +203,14 @@ pub async fn login_user(
             .http_status(StatusCode::INTERNAL_SERVER_ERROR)
             .code(ApiErrorCode::JwtCreationError)
             .context(format!("failed to create refresh token: {}", e))
-            .message("Failed to create refresh token")
+            .message("Authentication service error")
             .build()
     })?;
 
     let refresh_token_hash = hash_token(&refresh_token);
+
     let refresh_expires_at =
-        chrono::Utc::now().naive_utc() + chrono::Duration::days(30);
+        chrono::Utc::now().naive_utc() + chrono::Duration::days(refresh_token_ttl_days());
 
     diesel::insert_into(crate::schema::refresh_tokens::table)
         .values(&crate::models::NewRefreshToken {
@@ -246,7 +248,7 @@ pub async fn get_current_user(
             .http_status(StatusCode::UNAUTHORIZED)
             .code(ApiErrorCode::InvalidToken)
             .context("access token verification failed")
-            .message("Invalid authorization token")
+            .message("Authentication failed")
             .build()
     })?;
 
@@ -264,7 +266,7 @@ pub async fn get_current_user(
                     "failed to find user from token subject '{}': {}",
                     claims.sub, e
                 ))
-                .message("Invalid authorization token")
+                .message("Authentication failed")
                 .build()
         })?;
 
@@ -284,41 +286,40 @@ pub async fn refresh_token(
             .http_status(StatusCode::UNAUTHORIZED)
             .code(ApiErrorCode::InvalidToken)
             .context("refresh token verification failed")
-            .message("Invalid refresh token")
+            .message("Authentication failed")
             .build()
     })?;
 
     let mut conn = state.db_pool.get().await?;
     let refresh_token_hash = hash_token(&payload.refresh_token);
 
+    let err_builder = ApiError::builder()
+        .http_status(StatusCode::UNAUTHORIZED)
+        .code(ApiErrorCode::InvalidToken)
+        .message("Authentication failed");
+
     let stored_token = crate::schema::refresh_tokens::table
         .filter(crate::schema::refresh_tokens::token_hash.eq(&refresh_token_hash))
         .first::<crate::models::RefreshToken>(&mut conn)
         .await
         .map_err(|e| {
-            ApiError::builder()
-                .http_status(StatusCode::UNAUTHORIZED)
-                .code(ApiErrorCode::InvalidToken)
+            err_builder
+                .clone()
                 .context(format!("refresh token not found in database: {}", e))
-                .message("Invalid refresh token")
                 .build()
         })?;
 
     if stored_token.revoked_at.is_some() {
-        return Err(ApiError::builder()
-            .http_status(StatusCode::UNAUTHORIZED)
-            .code(ApiErrorCode::InvalidToken)
+        return Err(err_builder
+            .clone()
             .context("refresh token is revoked")
-            .message("Invalid refresh token")
             .build());
     }
 
     if stored_token.expires_at < chrono::Utc::now().naive_utc() {
-        return Err(ApiError::builder()
-            .http_status(StatusCode::UNAUTHORIZED)
-            .code(ApiErrorCode::InvalidToken)
+        return Err(err_builder
+            .clone()
             .context("refresh token is expired in database")
-            .message("Invalid refresh token")
             .build());
     }
 
@@ -338,7 +339,7 @@ pub async fn refresh_token(
             .http_status(StatusCode::INTERNAL_SERVER_ERROR)
             .code(ApiErrorCode::JwtCreationError)
             .context(format!("failed to create access token: {}", e))
-            .message("Failed to create access token")
+            .message("Authentication service error")
             .build()
     })?;
 
@@ -347,13 +348,13 @@ pub async fn refresh_token(
             .http_status(StatusCode::INTERNAL_SERVER_ERROR)
             .code(ApiErrorCode::JwtCreationError)
             .context(format!("failed to create refresh token: {}", e))
-            .message("Failed to create refresh token")
+            .message("Authentication service error")
             .build()
     })?;
 
     let refresh_token_hash = hash_token(&refresh_token);
     let refresh_expires_at =
-        chrono::Utc::now().naive_utc() + chrono::Duration::days(30);
+        chrono::Utc::now().naive_utc() + chrono::Duration::days(refresh_token_ttl_days());
 
     diesel::insert_into(crate::schema::refresh_tokens::table)
         .values(&crate::models::NewRefreshToken {

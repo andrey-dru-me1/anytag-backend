@@ -44,7 +44,7 @@ For example: `images/2026/08/a1b2c3…9f0e.png`. The `yyyy/mm` prefix is the upl
 
 Two tables store media references (see [`migrations/2026-08-14-035230-0000_create_images`](../migrations/2026-08-14-035230-0000_create_images/up.sql)):
 
-- **`image_sources`** — deduplicated image content, keyed by the `file_sha256_hash` (the object's SHA-256 digest, the primary key). Stores `s3_path` (`images/yyyy/mm`), `extension`, `file_size`, `mime_type`, `bucket_name`, `width`, and `height` (all positive, enforced by CHECK constraints). The full S3 object key is derived as `s3_path/{file_sha256_hash}.{extension}`.
+- **`image_sources`** — deduplicated image content, keyed by the `file_sha256_hash` (the object's SHA-256 digest, the primary key). Stores `s3_key_prefix` (`images/yyyy/mm`), `extension`, `file_size`, `mime_type`, `bucket_name`, `width`, and `height` (all positive, enforced by CHECK constraints). The full S3 object key is derived as `s3_key_prefix/{file_sha256_hash}.{extension}`.
 - **`user_images`** — a user-uploaded image referencing an `image_sources` entry via `file_sha256_hash` (foreign key), and records the uploader (`created_by`) and `original_file_name`.
 
 Each row in `user_images` has an `id` that is used as the public image name.

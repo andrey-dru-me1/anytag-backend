@@ -173,10 +173,10 @@ async fn insert_image(
 
     // Only upload the object when a brand-new image_sources row was inserted
     // (on hash conflict the object already exists in the bucket). The key is
-    // built from the stored s3_path so it always matches the DB row.
+    // built from the stored s3_key_prefix so it always matches the DB row.
     if let Some(image_source) = maybe_image_source {
         let s3_key = ImageSource::construct_s3_key(
-            new_image_source.s3_path,
+            new_image_source.s3_key_prefix,
             &image_source.file_sha256_hash,
             &image_source.extension,
         );
@@ -246,10 +246,10 @@ pub async fn upload_image(
         .unwrap_or(file_sha256_hash);
     check_file_name_length(original_file_name)?;
 
-    let s3_path = &Utc::now().format("images/%Y/%m").to_string();
+    let s3_key_prefix = &Utc::now().format("images/%Y/%m").to_string();
     let new_image_source = NewImageSource {
         file_size,
-        s3_path,
+        s3_key_prefix,
         file_sha256_hash,
         extension: image_metadata.extension,
         mime_type: image_metadata.mime_type,
@@ -508,7 +508,7 @@ mod tests {
     fn sample_image_source() -> ImageSource {
         ImageSource {
             file_sha256_hash: "a".repeat(64),
-            s3_path: "images/2026/08".to_string(),
+            s3_key_prefix: "images/2026/08".to_string(),
             extension: "png".to_string(),
             file_size: 42,
             mime_type: "image/png".to_string(),

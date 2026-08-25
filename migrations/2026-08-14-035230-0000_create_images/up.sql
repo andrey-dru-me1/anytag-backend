@@ -3,7 +3,7 @@
 
 CREATE TABLE image_sources (
     file_sha256_hash CHAR(64) PRIMARY KEY,
-    s3_path VARCHAR(512) NOT NULL,
+    s3_key_prefix VARCHAR(512) NOT NULL,
     extension VARCHAR(15) NOT NULL,
     file_size BIGINT NOT NULL,
     mime_type VARCHAR(100) NOT NULL,

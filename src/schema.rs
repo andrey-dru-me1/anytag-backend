@@ -5,7 +5,7 @@ diesel::table! {
         #[max_length = 64]
         file_sha256_hash -> Bpchar,
         #[max_length = 512]
-        s3_path -> Varchar,
+        s3_key_prefix -> Varchar,
         #[max_length = 15]
         extension -> Varchar,
         file_size -> Int8,

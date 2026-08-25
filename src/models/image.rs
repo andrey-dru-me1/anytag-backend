@@ -11,7 +11,7 @@ use crate::models::{UserId, UserImageId};
 #[diesel(table_name = crate::schema::image_sources)]
 pub struct ImageSource {
     pub file_sha256_hash: String,
-    pub s3_path: String,
+    pub s3_key_prefix: String,
     pub extension: String,
     pub file_size: i64,
     pub mime_type: String,
@@ -24,7 +24,7 @@ pub struct ImageSource {
 #[diesel(table_name = crate::schema::image_sources)]
 pub struct NewImageSource<'a> {
     pub file_sha256_hash: &'a str,
-    pub s3_path: &'a str,
+    pub s3_key_prefix: &'a str,
     pub extension: &'a str,
     pub file_size: i64,
     pub mime_type: &'a str,
@@ -52,11 +52,11 @@ pub struct NewUserImage<'a> {
 }
 
 impl ImageSource {
-    pub fn construct_s3_key(s3_path: &str, file_hash: &str, extension: &str) -> String {
-        format!("{s3_path}/{file_hash}.{extension}")
+    pub fn construct_s3_key(s3_key_prefix: &str, file_hash: &str, extension: &str) -> String {
+        format!("{s3_key_prefix}/{file_hash}.{extension}")
     }
 
     pub fn s3_key(&self) -> String {
-        Self::construct_s3_key(&self.s3_path, &self.file_sha256_hash, &self.extension)
+        Self::construct_s3_key(&self.s3_key_prefix, &self.file_sha256_hash, &self.extension)
     }
 }

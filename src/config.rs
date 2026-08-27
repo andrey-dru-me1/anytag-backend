@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 The Anytag Backend Authors
 
+use std::env;
+
 use anyhow::Context;
 use aws_config::meta::region::RegionProviderChain;
 use aws_sdk_s3::{
@@ -12,76 +14,120 @@ use diesel_async::{
     pg::AsyncPgConnection,
     pooled_connection::{AsyncDieselConnectionManager, deadpool::Pool},
 };
-use dotenvy::dotenv;
-use std::env;
 
 pub type DbPool = Pool<AsyncPgConnection>;
 
-#[derive(Clone)]
-pub struct Config {
-    pub db_pool: DbPool,
-    pub s3_client: aws_sdk_s3::Client,
-    pub s3_media_bucket: String,
-    pub base_url: String,
+#[derive(Clone, Debug)]
+pub struct S3Config {
+    pub access_key_id: String,
+    pub secret_access_key: String,
+    pub endpoint_url: String,
+    pub media_bucket_name: String,
 }
 
-impl Config {
-    pub async fn from_env() -> anyhow::Result<Config> {
-        dotenv().ok();
-
-        let (s3_client, s3_media_bucket) = Self::setup_s3_client().await?;
-        let base_url = load_env("BASE_URL")?;
-        Ok(Config {
-            db_pool: Self::setup_database()?,
-            s3_client,
-            s3_media_bucket,
-            base_url,
+impl S3Config {
+    pub fn from_env() -> anyhow::Result<Self> {
+        Ok(Self {
+            access_key_id: load_env("AWS_ACCESS_KEY_ID")?,
+            secret_access_key: load_env("AWS_SECRET_ACCESS_KEY")?,
+            endpoint_url: load_env("S3_BASE_URL")?,
+            media_bucket_name: load_env("S3_BUCKET")?,
         })
     }
 
-    fn setup_database() -> anyhow::Result<DbPool> {
-        let db_url = load_env("DATABASE_URL")?;
-        let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(db_url);
-        Pool::builder(config)
-            .build()
-            .context("Failed to create database connection pool")
-    }
-
-    async fn setup_s3_client() -> anyhow::Result<(aws_sdk_s3::Client, String)> {
-        let access_key_id = load_env("AWS_ACCESS_KEY_ID")?;
-        let secret_access_key = load_env("AWS_SECRET_ACCESS_KEY")?;
-        let credentials = Credentials::new(access_key_id, secret_access_key, None, None, "manual");
+    /// Provisions the S3 client and ensures the media bucket exists,
+    /// creating it when missing.
+    pub async fn build_client(&self) -> anyhow::Result<aws_sdk_s3::Client> {
+        let credentials = Credentials::new(
+            &self.access_key_id,
+            &self.secret_access_key,
+            None,
+            None,
+            "manual",
+        );
 
         let region_provider =
             RegionProviderChain::default_provider().or_else(Region::new("us-east-1"));
         let shared_config = aws_config::from_env().region(region_provider).load().await;
 
-        let base_url = load_env("S3_BASE_URL")?;
         let config = aws_sdk_s3::config::Builder::from(&shared_config)
             .credentials_provider(credentials)
-            .endpoint_url(base_url)
+            .endpoint_url(&self.endpoint_url)
             .force_path_style(true)
             .build();
         let client = aws_sdk_s3::Client::from_conf(config);
 
-        let bucket_name = load_env("S3_BUCKET")?;
-        match client.head_bucket().bucket(&bucket_name).send().await {
+        let bucket_name = &self.media_bucket_name;
+        match client.head_bucket().bucket(bucket_name).send().await {
             Ok(_) => {
                 tracing::info!("Bucket '{bucket_name}' already exists");
             }
             Err(SdkError::ServiceError(e)) if let &HeadBucketError::NotFound(_) = e.err() => {
                 tracing::info!("Creating new bucket '{bucket_name}'");
-                client.create_bucket().bucket(&bucket_name).send().await?;
+                client.create_bucket().bucket(bucket_name).send().await?;
             }
             Err(e) => {
                 return Err(e.into());
             }
         }
 
-        Ok((client, bucket_name))
+        Ok(client)
     }
 }
 
-pub fn load_env(var: &'static str) -> anyhow::Result<String> {
+#[derive(Clone, Debug)]
+pub struct AppConfig {
+    pub s3: S3Config,
+    pub database_url: String,
+    pub base_url: String,
+}
+
+impl AppConfig {
+    pub fn from_env() -> anyhow::Result<AppConfig> {
+        Ok(Self {
+            s3: S3Config::from_env()?,
+            database_url: load_env("DATABASE_URL")?,
+            base_url: load_env("BASE_URL")?,
+        })
+    }
+
+    pub fn from_dotenv() -> anyhow::Result<Self> {
+        dotenvy::dotenv().ok();
+        Self::from_env()
+    }
+}
+
+/// Shared application state handed to Axum via `State<AppState>`.
+///
+/// Holds runtime resources (database pool, S3 client) plus the immutable
+/// [`AppConfig`] settings.
+#[derive(Clone)]
+pub struct AppState {
+    pub db_pool: DbPool,
+    pub s3_client: aws_sdk_s3::Client,
+    pub config: AppConfig,
+}
+
+impl AppState {
+    /// Build the full application state from the environment: loads settings,
+    /// creates the database pool and provisions the S3 client (auto-creating
+    /// the media bucket on startup).
+    pub async fn from_config(config: AppConfig) -> anyhow::Result<AppState> {
+        Ok(AppState {
+            db_pool: Self::setup_database(&config.database_url)?,
+            s3_client: config.s3.build_client().await?,
+            config,
+        })
+    }
+
+    fn setup_database(database_url: &str) -> anyhow::Result<DbPool> {
+        let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
+        Pool::builder(config)
+            .build()
+            .context("Failed to create database connection pool")
+    }
+}
+
+fn load_env(var: &'static str) -> anyhow::Result<String> {
     env::var(var).context(format!("{var} must be set in .env or environment"))
 }

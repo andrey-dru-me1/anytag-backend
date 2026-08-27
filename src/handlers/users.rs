@@ -7,7 +7,7 @@ use diesel_async::RunQueryDsl;
 use email_address::EmailAddress;
 use zxcvbn::{Score, zxcvbn};
 
-use crate::config::Config;
+use crate::config::AppState;
 use crate::dto::{CreateUserRequest, LoginRequest, LoginResponse, UserCreatedResponse};
 use crate::handlers::{ApiError, ApiErrorCode};
 use crate::models::{NewUser, User};
@@ -77,13 +77,13 @@ fn validate_password_strength(
 
 /// Handler for creating a new user
 pub async fn create_user(
-    State(config): State<Config>,
+    State(state): State<AppState>,
     Json(payload): Json<CreateUserRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
     validate_email(&payload.email)?;
     validate_password_strength(&payload.password, &payload.name, &payload.email)?;
 
-    let mut conn = config.db_pool.get().await?;
+    let mut conn = state.db_pool.get().await?;
 
     let password_hashed =
         hash_password(&payload.password).map_err(|e| (ApiErrorCode::PasswordHashError, e))?;
@@ -113,10 +113,10 @@ pub async fn create_user(
 }
 
 pub async fn login_user(
-    State(config): State<Config>,
+    State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut conn = config.db_pool.get().await?;
+    let mut conn = state.db_pool.get().await?;
 
     let err_builder = ApiError::builder()
         .http_status(StatusCode::UNAUTHORIZED)

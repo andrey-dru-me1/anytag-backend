@@ -110,7 +110,7 @@ async fn insert_user_with_id(pool: &config::DbPool, id: i32) -> anyhow::Result<(
         password_hash: &'a str,
     }
     let new_user = NewUser {
-        id: id,
+        id,
         name: &format!("User {id}"),
         email: &format!("user{id}@example.com"),
         password_hash: "not-a-real-hash",
@@ -129,9 +129,7 @@ where
 {
     TestApp::with_temporary_s3_bucket(async |test_app| {
         insert_user_with_id(&test_app.db_pool, 1).await?;
-        test_logic(test_app)
-            .await
-            .map_err(Into::<anyhow::Error>::into)
+        test_logic(test_app).await
     })
     .await
 }

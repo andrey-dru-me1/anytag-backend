@@ -8,16 +8,16 @@ use axum::{
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::config::Config;
+use crate::config::AppState;
 use crate::dto::{TagResponse, TagsResponse};
 use crate::handlers::{ApiError, ApiErrorCode};
 use crate::models::Tag;
 
 /// Handler for listing all tags
-pub async fn list_tags(State(config): State<Config>) -> Result<impl IntoResponse, ApiError> {
+pub async fn list_tags(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     use crate::schema::tags::dsl::*;
 
-    let mut conn = config.db_pool.get().await?;
+    let mut conn = state.db_pool.get().await?;
 
     let all_tags = tags
         .order(created_at.desc())

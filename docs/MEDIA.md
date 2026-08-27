@@ -28,7 +28,7 @@ The application connects with the credentials and bucket configured in `.env`:
 - `S3_BUCKET` — bucket name; created automatically on startup if it does not exist
 - `S3_BASE_URL` — endpoint URL (local: `http://localhost:8333`)
 
-On startup ([`src/config.rs`](../src/config.rs)) the app checks whether the bucket exists and creates it if needed.
+On startup ([`src/config.rs`](../src/config.rs)) via `S3Config::build_client()` the app checks whether the bucket exists and creates it if needed.
 
 ### Object Key Layout
 

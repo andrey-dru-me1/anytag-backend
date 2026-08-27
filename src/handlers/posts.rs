@@ -8,16 +8,16 @@ use axum::{
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
-use crate::config::Config;
+use crate::config::AppState;
 use crate::dto::{PostResponse, PostsResponse};
 use crate::handlers::{ApiError, ApiErrorCode};
 use crate::models::Post;
 
 /// Handler for listing all posts
-pub async fn list_posts(State(config): State<Config>) -> Result<impl IntoResponse, ApiError> {
+pub async fn list_posts(State(state): State<AppState>) -> Result<impl IntoResponse, ApiError> {
     use crate::schema::posts::dsl::*;
 
-    let mut conn = config.db_pool.get().await?;
+    let mut conn = state.db_pool.get().await?;
 
     let all_posts = posts
         .order(created_at.desc())

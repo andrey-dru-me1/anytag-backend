@@ -130,7 +130,7 @@ reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" 
 The project follows a modular Rust web application architecture with clear separation of concerns. Key components include:
 
 - **Application entry point** (`src/main.rs`) - Sets up the web server and routes
-- **Configuration** (`src/config.rs`) - Builds the async database pool and the S3 client, auto-creates the media bucket on startup
+- **Application state** (`src/config.rs`) - Defines `AppState` (runtime resources: async database pool, S3 client) and `AppConfig` (immutable settings). `AppState::from_config()` auto-creates the media bucket on startup
 - **Database models** (`src/models/`) - Define data structures and relationships
 - **Request/response DTOs** (`src/dto/`) - Data transfer objects for API boundaries
 - **HTTP handlers** (`src/handlers/`) - Process incoming requests and return responses

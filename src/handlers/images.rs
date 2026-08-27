@@ -18,7 +18,7 @@ use sha2::{Digest, Sha256};
 use tokio_util::io::ReaderStream;
 
 use crate::{
-    config::Config,
+    config::AppState,
     dto,
     handlers::{ApiError, ApiErrorCode},
     models::{ImageSource, NewImageSource, NewUserImage, UserImage},
@@ -231,10 +231,10 @@ fn check_file_name_length(file_name: &str) -> Result<(), ApiError> {
 // ---------- handler ----------
 
 pub async fn upload_image(
-    State(config): State<Config>,
+    State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut conn = config.db_pool.get().await?;
+    let mut conn = state.db_pool.get().await?;
 
     let uploaded = extract_file_field(&mut multipart).await?;
     let file_size = uploaded.data.len() as i64;
@@ -253,7 +253,7 @@ pub async fn upload_image(
         file_sha256_hash,
         extension: image_metadata.extension,
         mime_type: image_metadata.mime_type,
-        bucket_name: &config.s3_media_bucket,
+        bucket_name: &state.config.s3.media_bucket_name,
         width: image_metadata.width,
         height: image_metadata.height,
     };
@@ -267,15 +267,15 @@ pub async fn upload_image(
         &mut conn,
         &new_image_source,
         &new_user_image,
-        &config.s3_client,
-        &config.s3_media_bucket,
+        &state.s3_client,
+        &state.config.s3.media_bucket_name,
         uploaded.data,
     )
     .await?;
     let image_dto = dto::ImageDto::new(
         new_image_source,
         user_image,
-        &format!("{}/api/v1/media/images", config.base_url),
+        &format!("{}/api/v1/media/images", state.config.base_url),
         image_metadata.extension,
     );
 
@@ -349,13 +349,13 @@ fn prepare_headers(image_source: &ImageSource) -> Result<HeaderMap, ApiError> {
 }
 
 pub async fn get_image(
-    State(config): State<Config>,
+    State(state): State<AppState>,
     Path(image_name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut conn = config.db_pool.get().await?;
+    let mut conn = state.db_pool.get().await?;
     let (_user_image, image_source) = get_image_by_name(image_name, &mut conn).await?;
 
-    let s3_object = config
+    let s3_object = state
         .s3_client
         .get_object()
         .bucket(&image_source.bucket_name)

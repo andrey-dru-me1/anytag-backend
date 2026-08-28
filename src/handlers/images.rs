@@ -20,7 +20,7 @@ use tracing::debug;
 use aws_sdk_s3::error::ProvideErrorMetadata;
 
 use crate::{
-    config::AppState,
+    config::{AppState, DbPool},
     dto,
     handlers::{ApiError, ApiErrorCode},
     models::{self, ImageSource, NewImageSource, NewUserImage, UserImage},
@@ -142,7 +142,7 @@ struct PartialNewUserImage<'a> {
 }
 
 async fn insert_image(
-    conn: &mut AsyncPgConnection,
+    pool: &DbPool,
     new_image_source: &NewImageSource<'_>,
     partial_new_user_image: &PartialNewUserImage<'_>,
     s3_client: &aws_sdk_s3::Client,
@@ -162,7 +162,9 @@ async fn insert_image(
     // content are resolved by the `s3_key` UNIQUE index: the loser blocks until
     // the winner commits, then `DO UPDATE` returns the winner's row. No advisory
     // lock or explicit fetch is needed.
-    let user_image = conn
+    let user_image = pool
+        .get()
+        .await?
         .transaction::<_, ApiError, _>(async |conn| {
             let image_source = diesel::insert_into(image_sources::table)
                 .values(new_image_source)
@@ -263,8 +265,6 @@ pub async fn upload_image(
     State(state): State<AppState>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut conn = state.db_pool.get().await?;
-
     let uploaded = extract_file_field(&mut multipart).await?;
     let file_size = uploaded.data.len() as i64;
     let file_sha256_hash = &sha256_hex(&uploaded.data);
@@ -290,7 +290,7 @@ pub async fn upload_image(
 
     debug!("Inserting image in db and store to s3");
     let user_image = insert_image(
-        &mut conn,
+        &state.db_pool,
         &new_image_source,
         &partial_new_user_image,
         &state.s3_client,

@@ -27,6 +27,7 @@ pub enum ApiErrorCode {
     PathParameterParseError,
     S3StorageError,
     ImageNotFound,
+    ImageTooLarge,
 }
 
 #[derive(bon::Builder, Debug)]

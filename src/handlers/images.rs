@@ -83,9 +83,18 @@ async fn extract_file_field(multipart: &mut Multipart) -> Result<UploadedFile, A
 
 // ---------- image inspection ----------
 
+/// Maximum allowed width or height (per side) of an uploaded image.
+///
+/// Kept well below `i32::MAX` (the type of [`ImageMetadata::width`]) so the
+/// `u32 -> i32` conversion is always safe.
+const MAX_IMAGE_DIMENSION: u32 = 10_000;
+
+/// Maximum allowed total number of pixels (`width * height`) of an uploaded image.
+const MAX_IMAGE_PIXELS: u64 = 40_000_000;
+
 /// Validates that `data` decodes as an image and returns its metadata.
 fn inspect_image<'a>(data: &[u8]) -> Result<ImageMetadata<'a>, ApiError> {
-    let reader = ImageReader::new(Cursor::new(data))
+    let mut reader = ImageReader::new(Cursor::new(data))
         .with_guessed_format()
         .map_err(|e| {
             ApiError::builder()
@@ -95,6 +104,15 @@ fn inspect_image<'a>(data: &[u8]) -> Result<ImageMetadata<'a>, ApiError> {
                 .message("Uploaded file format is unsupported")
                 .build()
         })?;
+
+    // Defense in depth: ask decoders to reject oversized dimensions while
+    // reading the header. The explicit checks below remain the source of truth
+    // because some decoders do not honor every `Limits` field.
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(MAX_IMAGE_DIMENSION);
+    limits.max_image_height = Some(MAX_IMAGE_DIMENSION);
+    reader.limits(limits);
+
     let format = reader.format().ok_or_else(|| {
         ApiError::builder()
             .code(ApiErrorCode::FileUploadError)
@@ -112,6 +130,18 @@ fn inspect_image<'a>(data: &[u8]) -> Result<ImageMetadata<'a>, ApiError> {
             .build()
     })?;
     let (width, height) = reader.into_dimensions().map_err(|e| {
+        if matches!(
+            &e,
+            image::ImageError::Limits(limit_err)
+                if limit_err.kind() == image::error::LimitErrorKind::DimensionError
+        ) {
+            return ApiError::builder()
+                .code(ApiErrorCode::ImageTooLarge)
+                .http_status(StatusCode::PAYLOAD_TOO_LARGE)
+                .context(format!("image dimensions exceed allowed limits: {e}"))
+                .message("Image dimensions are too large")
+                .build();
+        }
         ApiError::builder()
             .code(ApiErrorCode::FileUploadError)
             .http_status(StatusCode::BAD_REQUEST)
@@ -120,12 +150,50 @@ fn inspect_image<'a>(data: &[u8]) -> Result<ImageMetadata<'a>, ApiError> {
             .build()
     })?;
 
+    // Explicit guards against integer overflow (`u32 -> i32`) and excessively
+    // large images. These do not rely on the decoder honoring `Limits`.
+    let (width, height) = check_image_dimensions(width, height)?;
+
     Ok(ImageMetadata {
         mime_type: format.to_mime_type(),
         extension,
-        width: width as i32,
-        height: height as i32,
+        width,
+        height,
     })
+}
+
+/// Validates image dimensions against the configured limits and converts them
+/// to the `i32` representation stored in [`ImageMetadata`].
+///
+/// This guards against both integer overflow (`u32 -> i32` wrapping) and
+/// excessively large images, independent of decoder-side limit enforcement.
+fn check_image_dimensions(width: u32, height: u32) -> Result<(i32, i32), ApiError> {
+    if width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION {
+        return Err(image_too_large_error(width, height));
+    }
+    let total_pixels = u64::from(width) * u64::from(height);
+    if total_pixels > MAX_IMAGE_PIXELS {
+        return Err(image_too_large_error(width, height));
+    }
+
+    // Safe: both dimensions are now `<= MAX_IMAGE_DIMENSION <= i32::MAX`.
+    let width = i32::try_from(width).expect("width is bounded by MAX_IMAGE_DIMENSION");
+    let height = i32::try_from(height).expect("height is bounded by MAX_IMAGE_DIMENSION");
+
+    Ok((width, height))
+}
+
+/// Builds the error returned when an image exceeds the configured size limits.
+fn image_too_large_error(width: u32, height: u32) -> ApiError {
+    ApiError::builder()
+        .code(ApiErrorCode::ImageTooLarge)
+        .http_status(StatusCode::PAYLOAD_TOO_LARGE)
+        .context(format!(
+            "image dimensions {width}x{height} exceed allowed limits \
+             (max side {MAX_IMAGE_DIMENSION}, max pixels {MAX_IMAGE_PIXELS})"
+        ))
+        .message("Image is too large")
+        .build()
 }
 
 // ---------- key building ----------
@@ -503,6 +571,42 @@ mod tests {
         let err = inspect_image(&data).unwrap_err();
         assert_eq!(err.status(), StatusCode::BAD_REQUEST);
         assert_eq!(*err.error_code(), ApiErrorCode::FileUploadError);
+    }
+
+    // -----------------------------------------------------------------------
+    // check_image_dimensions
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_check_image_dimensions_accepts_reasonable_size() {
+        let (width, height) =
+            check_image_dimensions(1920, 1080).expect("1920x1080 should be allowed");
+        assert_eq!(width, 1920);
+        assert_eq!(height, 1080);
+    }
+
+    #[test]
+    fn test_check_image_dimensions_accepts_maximum_pixels() {
+        // 10_000 x 4_000 == 40_000_000 pixels, exactly at the cap.
+        let (width, height) =
+            check_image_dimensions(10_000, 4_000).expect("at-cap image should be allowed");
+        assert_eq!(width, 10_000);
+        assert_eq!(height, 4_000);
+    }
+
+    #[test]
+    fn test_check_image_dimensions_rejects_side_too_large() {
+        let err = check_image_dimensions(MAX_IMAGE_DIMENSION + 1, 10).unwrap_err();
+        assert_eq!(err.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(*err.error_code(), ApiErrorCode::ImageTooLarge);
+    }
+
+    #[test]
+    fn test_check_image_dimensions_rejects_too_many_pixels() {
+        // 8_000 x 8_000 == 64_000_000 pixels, over the 40_000_000 cap.
+        let err = check_image_dimensions(8_000, 8_000).unwrap_err();
+        assert_eq!(err.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(*err.error_code(), ApiErrorCode::ImageTooLarge);
     }
 
     // -----------------------------------------------------------------------

@@ -32,20 +32,20 @@ On startup ([`src/config.rs`](../src/config.rs)) via `S3Config::build_client()` 
 
 ### Object Key Layout
 
-Objects are stored under a date-partitioned, content-addressed key. The first two path segments are the UTC upload date (`images/yyyy/mm`), and the file name is derived from the file's SHA-256 digest:
+Objects are stored under a content-addressed key derived from the file's SHA-256 digest:
 
 ```text
-images/yyyy/mm/{sha256_hex}.{extension}
+images/{sha256_hex}.{extension}
 ```
 
-For example: `images/2026/08/a1b2c3…9f0e.png`. The `yyyy/mm` prefix is the upload year and month (in UTC, see [`src/handlers/images.rs`](../src/handlers/images.rs)) and groups objects into monthly folders. Deduplication is handled at the database level: `image_sources` is keyed on the SHA-256 hash, so re-uploading identical bytes reuses the existing row and does not write a new object — identical files therefore map to the same object and are shared across uploads.
+For example: `images/a1b2c3…9f0e.png`. The key is constructed in [`src/handlers/images.rs`](../src/handlers/images.rs) and is unique per distinct file content. Deduplication is handled at both the storage and database levels: the object is written with a conditional PUT (`If-None-Match: *`) that never overwrites an existing key, and `image_sources` has a UNIQUE constraint on `s3_key` — so re-uploading identical bytes reuses the existing object and row, and identical files map to the same object and are shared across uploads.
 
 ## Database
 
 Two tables store media references (see [`migrations/2026-08-14-035230-0000_create_images`](../migrations/2026-08-14-035230-0000_create_images/up.sql)):
 
-- **`image_sources`** — deduplicated image content, keyed by the `file_sha256_hash` (the object's SHA-256 digest, the primary key). Stores `s3_key_prefix` (`images/yyyy/mm`), `extension`, `file_size`, `mime_type`, `bucket_name`, `width`, and `height` (all positive, enforced by CHECK constraints). The full S3 object key is derived as `s3_key_prefix/{file_sha256_hash}.{extension}`.
-- **`user_images`** — a user-uploaded image referencing an `image_sources` entry via `file_sha256_hash` (foreign key), and records the uploader (`created_by`) and `original_file_name`.
+- **`image_sources`** — deduplicated image content with a surrogate `id` primary key and a UNIQUE `s3_key` (the object's full S3 key, `images/{sha256_hex}.{extension}`). Stores `file_size`, `mime_type`, `bucket_name`, `width`, and `height` (all positive, enforced by CHECK constraints).
+- **`user_images`** — a user-uploaded image referencing an `image_sources` entry via `image_source_id` (foreign key), and records the uploader (`created_by`) and `original_file_name`.
 
 Each row in `user_images` has an `id` that is used as the public image name.
 
@@ -62,7 +62,9 @@ POST /api/v1/media/images
 - **Content-Type**: `multipart/form-data`
 - **Field**: `file` — the image binary (the first field named `file` is used; other fields are ignored)
 
-The uploaded bytes are validated as an image (JPEG, PNG, or WebP). On success the object is written to the bucket, rows are inserted into `image_sources` (with `ON CONFLICT ... DO NOTHING` for deduplication) and `user_images` inside a transaction, and the created image is returned.
+The uploaded bytes are validated as an image (JPEG, PNG, or WebP). On success the object is written to the bucket (a conditional PUT with `If-None-Match: *`), then rows are inserted into `image_sources` (with `ON CONFLICT (s3_key) DO UPDATE` for deduplication) and `user_images` inside a transaction, and the created image is returned.
+
+> **Orphaned S3 objects**: the object is uploaded *before* the database transaction. If the subsequent database insert fails, the request fails but the object may remain in the bucket with no referencing `image_sources` row. This is intentional and harmless: an orphaned object never affects user requests (unlike an orphaned database row, which could be served back as a dangling reference), and it will most likely be reused by the same user retrying the failed upload (since the key is content-addressed). Even if never reused, the cost is bounded — at most one extra object per failed upload (the body limit is ~10 MB) with no error consequences.
 
 **Response `200 OK`** — JSON:
 

@@ -15,7 +15,7 @@ use crate::schema::users::dsl::*;
 
 use argon2::{
     Argon2,
-    password_hash::{phc::PasswordHash, PasswordHasher, PasswordVerifier},
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 
 fn hash_password(password: &str) -> Result<String, String> {

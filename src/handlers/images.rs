@@ -10,22 +10,21 @@ use axum::{
     http::{HeaderMap, StatusCode, header},
     response::IntoResponse,
 };
-use chrono::Utc;
-use diesel::{ExpressionMethods, OptionalExtension, QueryDsl};
+use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::{AsyncConnection, RunQueryDsl, pg::AsyncPgConnection};
 use image::ImageReader;
 use sha2::{Digest, Sha256};
 use tokio_util::io::ReaderStream;
+use tracing::debug;
+
+use aws_sdk_s3::error::ProvideErrorMetadata;
 
 use crate::{
     config::AppState,
     dto,
     handlers::{ApiError, ApiErrorCode},
-    models::{ImageSource, NewImageSource, NewUserImage, UserImage},
-    schema::{
-        image_sources,
-        user_images::dsl::{id as user_image_id, user_images},
-    },
+    models::{self, ImageSource, NewImageSource, NewUserImage, UserImage},
+    schema::{image_sources, user_images},
 };
 
 struct UploadedFile {
@@ -137,26 +136,55 @@ fn sha256_hex(data: &[u8]) -> String {
 
 // ---------- persistence ----------
 
+struct PartialNewUserImage<'a> {
+    pub original_file_name: &'a str,
+    pub created_by: models::UserId,
+}
+
 async fn insert_image(
     conn: &mut AsyncPgConnection,
     new_image_source: &NewImageSource<'_>,
-    new_user_image: &NewUserImage<'_>,
+    partial_new_user_image: &PartialNewUserImage<'_>,
     s3_client: &aws_sdk_s3::Client,
     s3_bucket_name: &str,
     data: Bytes,
 ) -> Result<UserImage, ApiError> {
-    // DB part runs inside a transaction; S3 is deliberately kept outside so a
-    // failed image_sources/user_images insert cannot leave an orphaned object.
-    let (maybe_image_source, user_image) = conn
+    // Upload to S3 before the DB transaction. This can orphan an object if the
+    // inserts below fail, but that is harmless: an orphaned object never fails a
+    // user request (unlike an orphaned DB row, which would 404/500 on
+    // retrieval), and because the key is content-addressed a retrying uploader
+    // will reuse it. See `upload_s3_object` for why the upload itself is
+    // idempotent.
+    upload_s3_object(s3_client, s3_bucket_name, new_image_source.s3_key, data).await?;
+
+    // A single upsert: `ON CONFLICT ... DO UPDATE` inserts the row if absent and
+    // returns the existing one otherwise. Two concurrent uploads of the same
+    // content are resolved by the `s3_key` UNIQUE index: the loser blocks until
+    // the winner commits, then `DO UPDATE` returns the winner's row. No advisory
+    // lock or explicit fetch is needed.
+    let user_image = conn
         .transaction::<_, ApiError, _>(async |conn| {
-            let maybe_image_source = diesel::insert_into(image_sources::dsl::image_sources)
+            let image_source = diesel::insert_into(image_sources::table)
                 .values(new_image_source)
-                .on_conflict(image_sources::file_sha256_hash)
-                .do_nothing()
+                .on_conflict(image_sources::s3_key)
+                .do_update()
+                .set(image_sources::s3_key.eq(diesel::upsert::excluded(image_sources::s3_key)))
                 .get_result::<ImageSource>(conn)
                 .await
-                .optional()?;
-            let user_image = diesel::insert_into(user_images)
+                .map_err(|e| {
+                    ApiError::builder()
+                        .code(ApiErrorCode::DbQueryError)
+                        .http_status(StatusCode::INTERNAL_SERVER_ERROR)
+                        .context(format!("database image_source upsert failed: {e}"))
+                        .build()
+                })?;
+
+            let new_user_image = NewUserImage {
+                image_source_id: image_source.id,
+                original_file_name: partial_new_user_image.original_file_name,
+                created_by: partial_new_user_image.created_by,
+            };
+            let user_image = diesel::insert_into(user_images::table)
                 .values(new_user_image)
                 .get_result::<UserImage>(conn)
                 .await
@@ -167,21 +195,9 @@ async fn insert_image(
                         .context(format!("database image insert query failed: {e}"))
                         .build()
                 })?;
-            Ok((maybe_image_source, user_image))
+            Ok(user_image)
         })
         .await?;
-
-    // Only upload the object when a brand-new image_sources row was inserted
-    // (on hash conflict the object already exists in the bucket). The key is
-    // built from the stored s3_key_prefix so it always matches the DB row.
-    if let Some(image_source) = maybe_image_source {
-        let s3_key = ImageSource::construct_s3_key(
-            new_image_source.s3_key_prefix,
-            &image_source.file_sha256_hash,
-            &image_source.extension,
-        );
-        upload_s3_object(s3_client, s3_bucket_name, &s3_key, data).await?;
-    }
 
     Ok(user_image)
 }
@@ -194,23 +210,36 @@ async fn upload_s3_object(
     file_name: &str,
     data: Bytes,
 ) -> Result<(), ApiError> {
-    client
+    let result = client
         .put_object()
         .bucket(bucket_name)
         .key(file_name)
+        // Create-only: an existing key returns 412 instead of overwriting.
+        // Because the key is content-addressed, an existing object is
+        // byte-identical, so 412 is treated as success below.
+        .if_none_match("*")
         .body(data.into())
         .send()
-        .await
-        .map(|_| ())
-        .map_err(|e| {
-            ApiError::builder()
-                .code(ApiErrorCode::S3StorageError)
-                .http_status(StatusCode::INTERNAL_SERVER_ERROR)
-                .context(format!(
-                    "failed to put object to the s3 bucket '{bucket_name}': {e}"
-                ))
-                .build()
-        })
+        .await;
+
+    match result {
+        Ok(_) => Ok(()),
+        Err(e)
+            if e.as_service_error()
+                .map(|se| se.code() == Some("PreconditionFailed"))
+                .unwrap_or(false) =>
+        {
+            // Existing object: identical content, nothing to write.
+            Ok(())
+        }
+        Err(e) => Err(ApiError::builder()
+            .code(ApiErrorCode::S3StorageError)
+            .http_status(StatusCode::INTERNAL_SERVER_ERROR)
+            .context(format!(
+                "failed to put object to the s3 bucket '{bucket_name}': {e}"
+            ))
+            .build()),
+    }
 }
 
 fn check_file_name_length(file_name: &str) -> Result<(), ApiError> {
@@ -246,27 +275,24 @@ pub async fn upload_image(
         .unwrap_or(file_sha256_hash);
     check_file_name_length(original_file_name)?;
 
-    let s3_key_prefix = &Utc::now().format("images/%Y/%m").to_string();
     let new_image_source = NewImageSource {
+        s3_key: &format!("images/{}.{}", file_sha256_hash, image_metadata.extension),
         file_size,
-        s3_key_prefix,
-        file_sha256_hash,
-        extension: image_metadata.extension,
         mime_type: image_metadata.mime_type,
         bucket_name: &state.config.s3.media_bucket_name,
         width: image_metadata.width,
         height: image_metadata.height,
     };
-    let new_user_image = NewUserImage {
+    let partial_new_user_image = PartialNewUserImage {
         original_file_name,
-        file_sha256_hash,
         created_by: 1, // todo: change once jwt is implemented
     };
 
+    debug!("Inserting image in db and store to s3");
     let user_image = insert_image(
         &mut conn,
         &new_image_source,
-        &new_user_image,
+        &partial_new_user_image,
         &state.s3_client,
         &state.config.s3.media_bucket_name,
         uploaded.data,
@@ -278,6 +304,7 @@ pub async fn upload_image(
         &format!("{}/api/v1/media/images", state.config.base_url),
         image_metadata.extension,
     );
+    debug!("Image is inserted");
 
     Ok(Json(image_dto))
 }
@@ -309,9 +336,9 @@ async fn get_image_by_name(
 ) -> Result<(UserImage, ImageSource), ApiError> {
     let image_id = parse_image_id(&image_name)?;
 
-    user_images
-        .inner_join(image_sources::dsl::image_sources)
-        .filter(user_image_id.eq(image_id))
+    user_images::table
+        .inner_join(image_sources::table)
+        .filter(user_images::id.eq(image_id))
         .first::<(UserImage, ImageSource)>(conn)
         .await
         .map_err(|e| {
@@ -359,7 +386,7 @@ pub async fn get_image(
         .s3_client
         .get_object()
         .bucket(&image_source.bucket_name)
-        .key(image_source.s3_key())
+        .key(&image_source.s3_key)
         .send()
         .await
         .map_err(|e| {
@@ -367,8 +394,8 @@ pub async fn get_image(
                 .code(ApiErrorCode::S3StorageError)
                 .http_status(StatusCode::INTERNAL_SERVER_ERROR)
                 .context(format!(
-                    "failed to load media file from s3 storage by its hash: '{}': {e}",
-                    image_source.file_sha256_hash
+                    "failed to load media file from s3 storage by its key: '{}': {e}",
+                    image_source.s3_key
                 ))
                 .build()
         })?;
@@ -507,9 +534,8 @@ mod tests {
 
     fn sample_image_source() -> ImageSource {
         ImageSource {
-            file_sha256_hash: "a".repeat(64),
-            s3_key_prefix: "images/2026/08".to_string(),
-            extension: "png".to_string(),
+            id: 84,
+            s3_key: "images/2026/08/a.png".to_string(),
             file_size: 42,
             mime_type: "image/png".to_string(),
             bucket_name: "test-bucket".to_string(),

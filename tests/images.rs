@@ -8,6 +8,7 @@ use anytag_backend::handlers::ApiErrorCode;
 use anytag_backend::{config, schema};
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use diesel::{ExpressionMethods, QueryDsl};
 use diesel_async::RunQueryDsl;
 use http_body_util::BodyExt;
 use image::ImageFormat;
@@ -300,7 +301,7 @@ async fn test_get_image_success() -> anyhow::Result<()> {
                     .context("Failed to build GET request")?,
             )
             .await?;
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::OK, "{response:#?}");
         assert_eq!(
             response
                 .headers()
@@ -358,6 +359,159 @@ async fn test_get_image_invalid_id() -> anyhow::Result<()> {
 
         let json = response_json(response).await?;
         assert_eq!(json["code"], ApiErrorCode::PathParameterParseError.as_ref());
+        Ok(())
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// concurrency
+// ---------------------------------------------------------------------------
+
+/// Two concurrent uploads of the same bytes must both succeed, produce
+/// distinct `user_images` rows, and yield exactly one `image_sources` row.
+/// Without serialization, one of the uploads would 500 on the `s3_key` unique
+/// constraint (and one S3 object would silently overwrite the other).
+///
+/// fixme: this test is not actually concurrent. The test pool uses `max_size=1`
+/// and `begin_test_transaction` (`tests/common/mod.rs`), so the two
+/// `tokio::join!` uploads serialize on the pool connection acquired at the top
+/// of `upload_image`. The real race (loser blocking on the `s3_key` UNIQUE
+/// index until the winner commits) is never exercised here.
+#[tokio::test]
+async fn test_upload_concurrent_identical_bytes() -> anyhow::Result<()> {
+    run_test_with_s3(async |test_app| {
+        let data = png_bytes();
+
+        let (a, b) = tokio::join!(
+            test_app.router().oneshot(multipart_upload(&data, "a.png")?),
+            test_app.router().oneshot(multipart_upload(&data, "b.png")?)
+        );
+        let (resp_a, resp_b) = (a?, b?);
+        assert_eq!(
+            resp_a.status(),
+            StatusCode::OK,
+            "first concurrent upload failed"
+        );
+        assert_eq!(
+            resp_b.status(),
+            StatusCode::OK,
+            "second concurrent upload failed"
+        );
+
+        let json_a = response_json(resp_a).await?;
+        let json_b = response_json(resp_b).await?;
+        assert_ne!(
+            json_a["id"], json_b["id"],
+            "each upload must create its own user_images row"
+        );
+
+        // Exactly one image_sources row must exist for this content. Count by the
+        // content-addressed s3_key (not just mime_type) so a pre-existing committed
+        // row from a previous run cannot skew the assertion.
+        use sha2::{Digest, Sha256};
+        let expected_key = format!("images/{}.png", hex::encode(Sha256::digest(&data)));
+
+        let mut conn = test_app
+            .db_pool
+            .get()
+            .await
+            .context("Failed to get test connection")?;
+        let count = schema::image_sources::table
+            .filter(schema::image_sources::s3_key.eq(&expected_key))
+            .count()
+            .get_result::<i64>(&mut conn)
+            .await
+            .context("Failed to count image_sources rows")?;
+        assert_eq!(
+            count, 1,
+            "concurrent identical uploads must deduplicate to one image_sources row"
+        );
+
+        Ok(())
+    })
+    .await
+}
+
+// ---------------------------------------------------------------------------
+// re-upload after image_sources row is gone (conditional PUT path)
+// ---------------------------------------------------------------------------
+
+/// Upload an image, delete the `image_sources` (and `user_images`) rows, then
+/// re-upload the same bytes. The S3 object still exists, so the app's
+/// conditional PUT must get `412` and proceed to re-insert the DB row instead
+/// of failing or overwriting.
+#[tokio::test]
+async fn test_reupload_when_object_remains_after_db_row_deleted() -> anyhow::Result<()> {
+    run_test_with_s3(async |test_app| {
+        let data = png_bytes();
+        let resp = test_app
+            .router()
+            .oneshot(multipart_upload(&data, "photo.png")?)
+            .await?;
+        assert_eq!(resp.status(), StatusCode::OK);
+        let json = response_json(resp).await?;
+        let first_id = json["id"].as_i64().context("id missing")?;
+
+        // Delete the DB rows but leave the S3 object in place. The connection
+        // must be dropped (scoped block) before the re-upload request below:
+        // the test pool has max_size=1, so holding it here would deadlock the
+        // re-upload's own `db_pool.get()`.
+        {
+            let mut conn = test_app
+                .db_pool
+                .get()
+                .await
+                .context("Failed to get test connection")?;
+            diesel::delete(schema::user_images::table)
+                .execute(&mut conn)
+                .await
+                .context("Failed to delete user_images rows")?;
+            diesel::delete(schema::image_sources::table)
+                .execute(&mut conn)
+                .await
+                .context("Failed to delete image_sources rows")?;
+        }
+
+        // Re-upload the identical bytes: the app must reuse the existing S3
+        // object (conditional PUT returns 412, treated as success) and recreate
+        // the DB rows.
+        let resp2 = test_app
+            .router()
+            .oneshot(multipart_upload(&data, "photo.png")?)
+            .await?;
+        assert_eq!(
+            resp2.status(),
+            StatusCode::OK,
+            "re-upload after DB row deletion should succeed"
+        );
+        let json2 = response_json(resp2).await?;
+        assert_ne!(
+            json2["id"], first_id,
+            "re-upload creates a new user_images row"
+        );
+
+        // The re-uploaded image must be retrievable.
+        let get = test_app
+            .router()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/api/v1/media/images/{}.png", json2["id"]))
+                    .body(Body::empty())
+                    .context("Failed to build GET request")?,
+            )
+            .await?;
+        assert_eq!(
+            get.status(),
+            StatusCode::OK,
+            "re-upped image should be retrievable"
+        );
+        assert_eq!(
+            response_bytes(get).await?,
+            data,
+            "retrieved bytes must match the upload"
+        );
+
         Ok(())
     })
     .await

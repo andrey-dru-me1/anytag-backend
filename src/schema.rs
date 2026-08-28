@@ -1,13 +1,10 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    image_sources (file_sha256_hash) {
-        #[max_length = 64]
-        file_sha256_hash -> Bpchar,
+    image_sources (id) {
+        id -> Int4,
         #[max_length = 512]
-        s3_key_prefix -> Varchar,
-        #[max_length = 15]
-        extension -> Varchar,
+        s3_key -> Varchar,
         file_size -> Int8,
         #[max_length = 100]
         mime_type -> Varchar,
@@ -54,8 +51,7 @@ diesel::table! {
 diesel::table! {
     user_images (id) {
         id -> Int4,
-        #[max_length = 64]
-        file_sha256_hash -> Bpchar,
+        image_source_id -> Int4,
         #[max_length = 255]
         original_file_name -> Varchar,
         created_by -> Int4,
@@ -93,7 +89,7 @@ diesel::joinable!(posts -> users (user_id));
 diesel::joinable!(tag_user_visibility -> tags (tag_id));
 diesel::joinable!(tag_user_visibility -> users (user_id));
 diesel::joinable!(tags -> users (user_id));
-diesel::joinable!(user_images -> image_sources (file_sha256_hash));
+diesel::joinable!(user_images -> image_sources (image_source_id));
 diesel::joinable!(user_images -> users (created_by));
 diesel::joinable!(user_tag_subscriptions -> tags (tag_id));
 diesel::joinable!(user_tag_subscriptions -> users (user_id));

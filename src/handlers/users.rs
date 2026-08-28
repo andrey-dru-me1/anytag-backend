@@ -13,19 +13,16 @@ use crate::handlers::{ApiError, ApiErrorCode};
 use crate::models::{NewUser, User};
 use crate::schema::users::dsl::*;
 
-use rand_core::OsRng;
-
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{phc::PasswordHash, PasswordHasher, PasswordVerifier},
 };
 
 fn hash_password(password: &str) -> Result<String, String> {
-    let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
 
     argon2
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|e| format!("argon2 password hashing failed: {}", e))
 }
@@ -165,7 +162,7 @@ pub async fn login_user(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use argon2::password_hash::PasswordHash;
+    use argon2::password_hash::phc::PasswordHash;
     use axum::http::StatusCode;
 
     // -----------------------------------------------------------------------

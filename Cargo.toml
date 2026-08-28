@@ -34,9 +34,5 @@ tokio-util = { version = "0.7.19", features = ["io"] }
 uuid = { version = "1.25.0", features = ["v4"] }
 
 [dev-dependencies]
-tokio-test = "0.4"
-mockall = "~0.15.0"
-assert_matches = "1.5"
-tempfile = "3.10"
 http-body-util = "0.1"
 tower = "0.5"

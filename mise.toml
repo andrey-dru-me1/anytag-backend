@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[tools]
+"cargo:diesel_cli" = "2.3.12"
+"pipx:reuse" = { version = "6.2.0", extras = ["charset-normalizer"] }
+
+[env]
+_.file = ".env"
+DATABASE_URL = "{% if env.DATABASE_URL %}{{env.DATABASE_URL}}{% else %}{{env.DB_TYPE}}://{{env.DB_USER}}:{{env.DB_PASS}}@{{env.DB_HOST}}:{{env.DB_PORT}}/{{env.DB_NAME}}{% endif %}"

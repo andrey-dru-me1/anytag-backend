@@ -1,15 +1,19 @@
 {
+  // SPDX-License-Identifier: AGPL-3.0-only
+  // Copyright (C) 2026 The Anytag Backend Authors
+
   "recommendations": [
     // === Main Extensions ===
     "vadimcn.vscode-lldb",      // Rust debugging support
+    "hverlin.mise-vscode",      // mise: tool versions + environment (DATABASE_URL) — enable "mise.configureExtensionsAutomatically"
     "fill-labs.dependi",        // Dependency visualization (optional)
-    "mkhl.direnv",              // Environment management with direnv (optional)
     "docker.docker",            // Docker container management
-    "tamasfe.even-better-toml", // Enhanced TOML support for Cargo.toml, diesel.toml
-    "jnoortheen.nix-ide",       // Nix language support for flake.nix
+    "tamasfe.even-better-toml", // Enhanced TOML support for Cargo.toml, mise.toml, diesel.toml
     "rust-lang.rust-analyzer",  // Rust language server
 
     // === Optional Extensions ===
+    "mkhl.direnv",              // direnv environment loading (only if using the deprecated Nix env)
+    "jnoortheen.nix-ide",       // Nix language support for flake.nix (deprecated environment)
     "redhat.vscode-yaml",       // Provides YAML validation and formatting
     "ryanluker.vscode-coverage-gutters" // Displays test coverage from lcov.info
   ]

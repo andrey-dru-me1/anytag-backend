@@ -45,13 +45,15 @@
             nil
             git
             just
-            nixfmt-rfc-style
+            nixfmt
             openssl
             pkg-config
             nixd
             reuse
             cargo-watch
-            cargo-llvm-cov
+            cargo-llvm-cov  # test coverage
+          ] ++ lib.optionals stdenv.isDarwin [
+            apple-sdk
           ];
 
           env = {
@@ -64,6 +66,11 @@
           LD_LIBRARY_PATH = "${pkgs.openssl.out}/lib";
 
           shellHook = ''
+            ${pkgs.lib.optionalString pkgs.stdenv.isDarwin ''
+              export LLDB_DEBUGSERVER_PATH="/Library/Developer/CommandLineTools/Library/PrivateFrameworks/LLDB.framework/Versions/A/Resources/debugserver"
+              export PATH="/Library/Developer/CommandLineTools/usr/bin:/usr/bin:$PATH"
+            ''}
+
             # Construct DATABASE_URL from individual components if not already set
             if [ -z "$DATABASE_URL" ] && [ -n "$DB_TYPE" ] && [ -n "$DB_HOST" ] && [ -n "$DB_PORT" ] && [ -n "$DB_USER" ] && [ -n "$DB_PASS" ] && [ -n "$DB_NAME" ]; then
               export DATABASE_URL="$DB_TYPE://$DB_USER:$DB_PASS@$DB_HOST:$DB_PORT/$DB_NAME"
@@ -72,21 +79,6 @@
               echo "⚠️  DATABASE_URL is not set and required components are missing"
               echo "   Set DATABASE_URL or DB_TYPE, DB_HOST, DB_PORT, DB_USER, DB_PASS, DB_NAME in .env"
             fi
-
-            echo "========================================"
-            echo "🎯 anytag-backend Development Environment"
-            echo "========================================"
-            echo ""
-            echo "📦 Tools:"
-            echo "  Rust: $(rustc --version | cut -d' ' -f2)"
-            echo "  Cargo: $(cargo --version | cut -d' ' -f2)"
-            echo "  Diesel: $(diesel -V | cut -d' ' -f2)"
-            echo ""
-            echo "🚀 Quick start:"
-            echo "  1. docker compose up -d postgres"
-            echo "  2. diesel migration run"
-            echo "  3. cargo watch -x run   (hot-reload dev server)"
-            echo "========================================"
           '';
         };
 

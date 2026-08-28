@@ -35,9 +35,40 @@ cargo update <crate_name>
 cargo outdated
 ```
 
-## Adding Nix Dependencies
+## Managing Tool Versions with mise
 
-Edit `flake.nix` and re-enter the shell:
+Tool versions are pinned in [`mise.toml`](../mise.toml) (e.g. `diesel_cli = "2.3.12"`,
+`reuse = "6.2.0"`). After changing `mise.toml`, install/update the tools:
+
+```bash
+mise install
+```
+
+The Rust toolchain is pinned separately in [`rust-toolchain.toml`](../rust-toolchain.toml)
+(`channel = "1.98.0"`) and installed automatically by rustup on first `cargo`/`rustc`
+invocation. To pre-install it:
+
+```bash
+rustup toolchain install 1.98.0
+```
+
+### Run tools through just (recommended)
+
+Every [`just`](../Justfile) recipe runs through `mise x -- ...`, so it always uses the
+pinned tools and the constructed `DATABASE_URL`:
+
+```bash
+just cargo build
+just cargo clippy
+just test
+just diesel migration run
+just watch
+```
+
+## Adding Nix Dependencies (Deprecated)
+
+Only relevant if you still use the deprecated Nix environment. Edit `flake.nix` and
+re-enter the shell:
 
 ```bash
 nix develop

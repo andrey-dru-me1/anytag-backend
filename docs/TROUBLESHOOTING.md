@@ -5,18 +5,46 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 # Troubleshooting
 
-## Nix Issues
+## Environment / mise Issues
 
 ```bash
-# Clear Nix cache if builds fail
-nix-store --verify --check-contents
+# Reinstall/update mise-managed tools (diesel-cli, reuse)
+mise install
 
-# Update Nix channels
-nix-channel --update
+# Resolve the mise environment (loads .env, constructs DATABASE_URL)
+mise x -- env
 
-# Enter shell with pure isolation
-nix develop --pure
+# If your terminal is not mise-activated, use the just wrappers:
+just cargo build
+just diesel migration run
 ```
+
+## Rust/Diesel Issues
+
+```bash
+# Ensure the pinned toolchain is installed (rust-toolchain.toml: 1.98.0)
+rustup toolchain install 1.98.0
+
+# Clean and rebuild
+cargo clean
+cargo build
+
+# Update dependencies
+cargo update
+
+# Check diesel connection
+just diesel database reset
+```
+
+Common issues:
+
+- **"diesel command not found"**: install via `mise install`, or use `just diesel ...`
+- **"DATABASE_URL is not set" / "Failed to create database pool"**: verify `.env` exists
+  (`cp .env.example .env`) and run inside mise (`mise x -- ...`, `just ...`, or a
+  mise-activated VS Code terminal)
+- **rust-analyzer run/debug buttons fail with "DATABASE_URL is not set"**: the test
+  was launched outside the mise environment — enable the mise VS Code extension with
+  `mise.configureExtensionsAutomatically` (see [`IDE_SETUP.md`](./IDE_SETUP.md))
 
 ## Database Issues
 
@@ -30,7 +58,7 @@ docker compose logs postgres
 # Reset database (destructive!)
 docker compose down -v
 docker compose up -d postgres
-diesel migration run
+just diesel migration run   # through just so DATABASE_URL is set
 ```
 
 ## S3 / SeaweedFS Issues
@@ -53,22 +81,23 @@ Common issues:
 - **`S3_BASE_URL` not set**: `S3_BASE_URL` is required by the app (the local SeaweedFS S3 endpoint is `http://localhost:8333`). Verify it is present in `.env`.
 - **403 / signature errors**: SeaweedFS and the app must share the same `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` (defined in `docker-compose.yaml`).
 
-## Rust/Diesel Issues
+## Nix Issues (Deprecated Environment)
+
+Only relevant if you use the deprecated Nix setup:
 
 ```bash
-# Clean and rebuild
-cargo clean
-cargo build
+# Clear Nix cache if builds fail
+nix-store --verify --check-contents
 
-# Update dependencies
-cargo update
+# Update Nix channels
+nix-channel --update
 
-# Check diesel connection
-diesel database reset
+# Enter shell with pure isolation
+nix develop --pure
 ```
 
 ## See Also
 
 - [Development Guide](./DEVELOPMENT.md) — Development workflow, common tasks, and CI/CD
-- [Dependency Management](./DEPENDENCIES.md) — Adding and updating Rust and Nix dependencies
+- [Dependency Management](./DEPENDENCIES.md) — Adding and updating Rust dependencies and mise-managed tools
 - [REUSE Compliance](./REUSE.md) — License management and SPDX headers

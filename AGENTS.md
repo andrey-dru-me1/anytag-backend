@@ -14,26 +14,30 @@ This file provides guidance to agents when working with code in this repository.
 - **CI enforces strict clippy**: `cargo clippy -- -D warnings` — all warnings are errors
 - **CI enforces formatting**: `cargo fmt -- --check` must pass
 - **Migration commands**: `diesel migration run` / `diesel migration revert` / `diesel migration generate <name>`
+- **Preferred way to run tools is through `just`**: `just cargo …`, `just diesel …`, `just test`, `just watch` — every recipe runs through `mise x -- …`, which loads `mise.toml` env (`.env` + constructed `DATABASE_URL`). Running bare `cargo`/`diesel` works only if the terminal is mise-activated (e.g. mise VS Code extension with `mise.configureExtensionsAutomatically`).
 
 ## Code Style & Non-Obvious Conventions
 
-- **Rust Edition 2024** — ensure your toolchain supports it (Nix provides it via `rust-overlay`)
+- **Rust Edition 2024** — ensure your toolchain supports it. The toolchain is pinned in [`rust-toolchain.toml`](rust-toolchain.toml) (`channel = "1.98.0"`); rustup installs and selects it automatically on your first `cargo`/`rustc` invocation. Nix (via `rust-overlay`) may still provide a toolchain inside the deprecated Nix shell.
 - **All files MUST have SPDX headers**: Every file starts with `// SPDX-License-Identifier: AGPL-3.0-only` followed by `// Copyright (C) 2026 The Anytag Backend Authors`
-- **Custom `bon::Builder` for error types**: Use `#[derive(bon::Builder)]` with `#[builder(derive(Clone))]` pattern from [`src/handlers/mod.rs`](src/handlers/mod.rs:30) (not hand-written constructors)
-- **Two error patterns coexist**: Simple handlers use `Result<_, (StatusCode, String)>` tuples; complex handlers (like users) use the structured `HandlerErr` with an `ErrCode` enum from [`src/handlers/mod.rs`](src/handlers/mod.rs:19)
-- **Enum serialization via `strum`**: Error codes use `#[derive(AsRefStr, Display)]` with `#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]` — produces `WEAK_PASSWORD`, `DB_CONNECTION_ERROR`, etc.
+- **Custom `bon::Builder` for error types**: Use `#[derive(bon::Builder)]` with `#[builder(derive(Clone))]` pattern from [`src/handlers/mod.rs`](src/handlers/mod.rs) (not hand-written constructors)
+- **Unified error type `ApiError`**: All non-trivial handlers return `Result<_, ApiError>` — a `bon::Builder` struct carrying an `http_status`, a machine-readable `ApiErrorCode`, a `context` (logged), and an optional user-facing `message`. See [`src/handlers/mod.rs`](src/handlers/mod.rs). Simple handlers may still use `Result<_, (StatusCode, String)>` tuples.
+- **Enum serialization via `strum`**: Error codes use `#[derive(AsRefStr, Display)]` with `#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]` — produces `WEAK_PASSWORD`, `DB_CONNECTION_ERROR`, `FILE_UPLOAD_ERROR`, `S3_STORAGE_ERROR`, etc. (`ApiErrorCode` enum in [`src/handlers/mod.rs`](src/handlers/mod.rs))
 - **Password validation**: Must pass zxcvbn with `Score::Three` minimum (checked via `estimate.score() < Score::Three`)
-- **Password hashing**: Argon2 with `rand_core::OsRng` salt — see [`src/handlers/users.rs`](src/handlers/users.rs:21)
-- **Type aliases for IDs**: `Id = i32`, `UserId = Id`, `PostId = Id`, `TagId = Id` in [`src/models/mod.rs`](src/models/mod.rs:5)
-- **Model -> DTO conversion**: Via `impl From<Model> for Response`, pattern: [`src/dto/posts.rs`](src/dto/posts.rs:23)
+- **Password hashing**: Argon2 with `rand_core::OsRng` salt — see [`src/handlers/users.rs`](src/handlers/users.rs)
+- **Type aliases for IDs**: `Id = i32`, `UserId = Id`, `PostId = Id`, `TagId = Id`, `UserImageId = Id` in [`src/models/mod.rs`](src/models/mod.rs)
+- **Model -> DTO conversion**: Via `impl From<Model> for Response`, pattern: [`src/dto/posts.rs`](src/dto/posts.rs)
 - **Chrono `NaiveDateTime`** used for all timestamps; `.to_string()` produces `"1970-01-01 00:00:00"` format in DTOs
 - **`#[allow(deprecated)]`** is intentionally used in tests for Chrono's `from_timestamp_opt`/`timestamp()` methods
 
 ## Architecture
 
-- **Axum** with `State<DbPool>` extraction pattern for all handlers requiring DB access
-- **DbPool** alias: `Pool<ConnectionManager<PgConnection>>` via [`src/db.rs`](src/db.rs:10)
-- **Database URL** is auto-constructed from `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `DB_PORT` env vars in Nix shellHook — local port defaults to **54321** (not 5432)
+- **Axum** with `State<AppState>` extraction pattern for all handlers. Handlers pull a connection from the async pool via `state.db_pool.get().await?`
+- **Async DB**: The `DbPool` alias is `Pool<AsyncPgConnection>` (diesel-async + deadpool) defined in [`src/config.rs`](src/config.rs). All queries use `diesel_async` traits (`AsyncConnection`, `RunQueryDsl`)
+- **AppState / AppConfig split**: [`AppState`](src/config.rs) carries the runtime resources (`db_pool`, `s3_client`) plus an embedded [`AppConfig`](src/config.rs) with immutable settings (`s3`, `database_url`, `base_url`). Built by [`AppState::from_config()`](src/config.rs), which provisions the S3 bucket on startup via [`S3Config::build_client()`](src/config.rs)
+- **Media / S3 subsystem**: [`src/handlers/images.rs`](src/handlers/images.rs) implements image upload (`POST /api/v1/media/images`, multipart `file` field) and retrieval (`GET /api/v1/media/images/{image_name}`). Files are stored in an S3-compatible bucket keyed by content hash (`images/{sha256}.{ext}`); references live in `image_sources` / `user_images` tables
+- **Database URL** is auto-constructed by mise (`mise.toml`) from `DB_USER`, `DB_PASS`, `DB_NAME`, `DB_HOST`, `DB_PORT` env vars loaded from `.env` — local port defaults to **5432** (configurable via `DB_PORT`)
+- **S3 env vars** (SeaweedFS locally): `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `S3_BUCKET`, `S3_BASE_URL` — see `.env.example` and [`docs/MEDIA.md`](docs/MEDIA.md)
 
 ## Git & PR Conventions
 

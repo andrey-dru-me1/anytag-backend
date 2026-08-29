@@ -1,17 +1,22 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # Copyright (C) 2026 The Anytag Backend Authors
 
-# direnv configuration for anytag-backend
+# direnv configuration for anytag-backend (DEPRECATED)
 #
-# Copy to .envrc and run 'direnv allow'
-# See docs/DEVELOPMENT.md for detailed setup instructions
+# This file is only needed for the deprecated Nix-based development environment.
+# The recommended setup (docker + mise + just + rustup) does not require .envrc or
+# direnv at all — mise.toml loads .env and constructs DATABASE_URL automatically,
+# and the mise VS Code extension (mise.configureExtensionsAutomatically) activates
+# the environment inside VS Code.
+#
+# See docs/DEVELOPMENT.md for the recommended (mise) setup instructions.
 
 # Load .env file if present
 if [[ -f .env ]]; then
   dotenv .env
 fi
 
-# Load Nix environment from flake.nix
+# Load Nix environment from flake.nix (only in the deprecated Nix setup)
 use flake
 
 # Cleaner output

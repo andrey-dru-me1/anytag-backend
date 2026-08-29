@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Anytag Backend Authors
+# SPDX-License-Identifier: AGPL-3.0-only
+
+[toolchain]
+channel = "1.98.0"
+components = ["rustc", "cargo", "rust-analyzer", "clippy", "rustfmt"]
+profile = "default"

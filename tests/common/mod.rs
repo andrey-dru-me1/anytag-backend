@@ -1,112 +1,133 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 The Anytag Backend Authors
 
+#![allow(dead_code)]
+
 use anyhow::Context;
-use anytag_backend::db::DbPool;
-use anytag_backend::router::create_router;
-use axum::Router;
-use diesel::sql_query;
-use diesel_async::RunQueryDsl;
-use diesel_async::pg::AsyncPgConnection;
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
-use diesel_async::pooled_connection::deadpool::Pool;
+use anytag_backend::{config, router};
+use uuid::Uuid;
 
-/// Create a test database pool from the `DATABASE_URL` environment variable.
-///
-/// Uses `max_size=1` to minimise resource usage in tests.
-fn test_db_pool() -> anyhow::Result<DbPool> {
-    dotenv::dotenv().ok();
-    let database_url =
-        std::env::var("DATABASE_URL").context("DATABASE_URL must be set for integration tests")?;
-
-    let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
-    Pool::builder(config)
-        .max_size(1)
-        .build()
-        .context("Failed to create test database pool")
-}
-
-/// Transaction guard for test isolation.
-///
-/// On creation, begins a transaction on the pool's single connection.
-/// When dropped, rolls back the transaction, discarding all changes made
-/// during the test.
-///
-/// Tests obtain a pool handle via [`TestTransaction::pool`] and pass it to
-/// [`create_router`]. Because the pool is configured with `max_size=1`, every
-/// call to `pool.get()` returns the same underlying connection — the one
-/// inside this transaction — so all handler operations remain within the
-/// transaction boundary. No test data is ever persisted to the database.
-pub struct TestTransaction {
-    pool: DbPool,
-}
-
-impl TestTransaction {
-    /// Create a new test transaction.
-    pub async fn new() -> anyhow::Result<Self> {
-        let pool = test_db_pool()?;
-        let mut conn = pool
-            .get()
-            .await
-            .context("Failed to get connection for test transaction")?;
-        sql_query("BEGIN")
-            .execute(&mut conn)
-            .await
-            .context("Failed to begin test transaction")?;
-        // Drop the connection — it returns to the pool with the transaction active.
-        drop(conn);
-        Ok(Self { pool })
-    }
-
-    /// Return a clone of the pool for use in test handlers.
-    pub fn pool(&self) -> DbPool {
-        self.pool.clone()
-    }
-}
-
-/// Convenience wrapper for integration tests that bundles a [`TestTransaction`]
-/// and a pre-built router.
-///
-/// # Example
-///
-/// ```ignore
-/// use common::TestApp;
-///
-/// #[tokio::test]
-/// async fn test_something() -> anyhow::Result<()> {
-///     let test_app = TestApp::new().await?;
-///     let app = test_app.router();
-///     // … use `app` as an axum::Router …
-///     Ok(())
-/// }
-/// ```
-#[allow(dead_code)]
 pub struct TestApp {
-    #[allow(dead_code)]
-    tx: TestTransaction,
-    app: Router,
+    pub db_pool: config::DbPool,
+    pub s3_client: aws_sdk_s3::Client,
+    pub config: config::AppConfig,
+    router: axum::Router,
 }
 
-#[allow(dead_code)]
 impl TestApp {
-    /// Create a new `TestApp` with an isolated database transaction and a router.
     pub async fn new() -> anyhow::Result<Self> {
-        let tx = TestTransaction::new().await?;
-        let pool = tx.pool();
-        let app = create_router(pool);
-        Ok(Self { tx, app })
+        let config = config::AppConfig::from_dotenv()?;
+        Self::from_config(config).await
     }
 
-    /// Return a clone of the inner router.
-    ///
-    /// Cloning an axum [`Router`] is cheap (it shares internal state via `Arc`).
-    pub fn router(&self) -> Router {
-        self.app.clone()
+    pub async fn from_config(config: config::AppConfig) -> anyhow::Result<Self> {
+        let app_state = config::AppState {
+            db_pool: db::setup_test_db_pool(&config.database_url).await?,
+            s3_client: s3::mock_s3_client(),
+            config: config.clone(),
+        };
+        Ok(Self {
+            db_pool: app_state.db_pool.clone(),
+            s3_client: app_state.s3_client.clone(),
+            config,
+            router: router::create_router(app_state),
+        })
+    }
+
+    pub async fn with_temporary_s3_bucket<Fut, E>(
+        test_logic: impl FnOnce(Self) -> Fut,
+    ) -> anyhow::Result<()>
+    where
+        Fut: Future<Output = Result<(), E>>,
+        E: Into<anyhow::Error> + Send + Sync + 'static,
+    {
+        let config = config::AppConfig::from_dotenv()?;
+        Self::from_config_with_temporary_s3_bucket(config, test_logic).await
+    }
+
+    pub async fn from_config_with_temporary_s3_bucket<Fut, E>(
+        mut config: config::AppConfig,
+        test_logic: impl FnOnce(Self) -> Fut,
+    ) -> anyhow::Result<()>
+    where
+        Fut: Future<Output = Result<(), E>>,
+        E: Into<anyhow::Error> + Send + Sync + 'static,
+    {
+        let bucket_name = format!("test-bucket-{}", Uuid::new_v4());
+        config.s3.media_bucket_name = bucket_name.clone();
+        let app_state = config::AppState {
+            db_pool: db::setup_test_db_pool(&config.database_url).await?,
+            s3_client: config.s3.build_client().await?,
+            config: config.clone(),
+        };
+        let s3_client = app_state.s3_client.clone();
+        let test_app = Self {
+            db_pool: app_state.db_pool.clone(),
+            s3_client: app_state.s3_client.clone(),
+            config,
+            router: router::create_router(app_state),
+        };
+
+        let result = test_logic(test_app).await;
+
+        s3_client
+            .delete_bucket()
+            .bucket(&bucket_name)
+            .send()
+            .await
+            .context(format!("Could not delete bucket {}", bucket_name))?;
+
+        result.map_err(Into::into)
+    }
+
+    pub fn router(&self) -> axum::Router {
+        self.router.clone()
     }
 }
 
-// No custom `Drop` needed — `Pool` closes its connections on drop, and
-// PostgreSQL automatically rolls back any uncommitted transaction when the
-// underlying TCP connection is closed.  When the `TestTransaction` (and all
-// cloned pool handles) go out of scope, the pool is dropped, connections are
-// closed, and the transaction is rolled back automatically.
+mod db {
+    use anyhow::Context;
+    use anytag_backend::config::DbPool;
+    use diesel_async::AsyncConnection;
+    use diesel_async::pg::AsyncPgConnection;
+    use diesel_async::pooled_connection::deadpool::Pool;
+    use diesel_async::pooled_connection::{AsyncDieselConnectionManager, ManagerConfig};
+
+    /// Create a test database pool from the `DATABASE_URL` environment variable.
+    ///
+    /// Uses `max_size=1` to minimise resource usage in tests.
+    pub async fn setup_test_db_pool(database_url: &str) -> anyhow::Result<DbPool> {
+        let mut manager_config = ManagerConfig::<AsyncPgConnection>::default();
+        manager_config.custom_setup = Box::new(|url| {
+            Box::pin(async move {
+                let mut conn = AsyncPgConnection::establish(url)
+                    .await
+                    .map_err(|e| diesel::result::ConnectionError::BadConnection(e.to_string()))?;
+
+                conn.begin_test_transaction()
+                    .await
+                    .map_err(diesel::result::ConnectionError::CouldntSetupConfiguration)?;
+
+                Ok(conn)
+            })
+        });
+
+        let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new_with_config(
+            database_url,
+            manager_config,
+        );
+        Pool::builder(config)
+            .max_size(1)
+            .build()
+            .context("Failed to create test database pool")
+    }
+}
+
+mod s3 {
+    pub fn mock_s3_client() -> aws_sdk_s3::Client {
+        let s3_config = aws_sdk_s3::config::Builder::new()
+            .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
+            .build();
+        aws_sdk_s3::Client::from_conf(s3_config)
+    }
+}

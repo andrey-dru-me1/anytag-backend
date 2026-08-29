@@ -28,18 +28,22 @@ If a file is auto-generated (e.g., by Diesel or `cargo`), add it to [`REUSE.toml
 
 ## Adding a New File
 
-Every new file must include an SPDX header identifying its copyright and license. Use [`reuse annotate`](https://reuse.readthedocs.io/en/latest/manpage.html#annotate) to add headers:
+Every new file must include an SPDX header identifying its copyright and license. Use [`reuse annotate`](https://reuse.readthedocs.io/en/latest/manpage.html#annotate) to add headers. `reuse` is provided by mise (`pipx:reuse`); run it through `just` (safe without a mise-activated shell) or directly inside one:
 
 ```bash
 # Single file
-reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" src/handlers/new_module.rs
+just reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" src/handlers/new_module.rs
 
 # Multiple files with a glob pattern
-reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" src/handlers/*.rs
+just reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" src/handlers/*.rs
 
 # Dry-run to preview changes first
-reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" --dry-run src/new_file.rs
+just reuse annotate --license AGPL-3.0-only --copyright "The Anytag Backend Authors" --dry-run src/new_file.rs
 ```
+
+> Bare `reuse` works only in a mise-activated shell (VS Code terminal with the mise
+> extension, or `eval "$(mise activate)"` in your shell config). Otherwise use the
+> `just reuse ...` wrapper above.
 
 This automatically inserts the correct SPDX header using the appropriate comment syntax for each file type. Alternatively, you can add headers manually:
 
@@ -63,10 +67,11 @@ Each header must be followed by:
 Before committing, verify all files are properly annotated:
 
 ```bash
-# Install the REUSE tool (if not already in your Nix environment)
-pip install reuse
+# Run the linter (through just — works without a mise-activated shell)
+just reuse lint
 
-# Run the linter
+# Alternatively, inside a mise-activated shell (mise extension terminal or
+# `eval "$(mise activate)"` in your shell config), bare `reuse` works too:
 reuse lint
 
 # Expected output: "All files are compliant!"

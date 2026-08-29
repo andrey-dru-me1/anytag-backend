@@ -6,12 +6,15 @@ pub type Id = i32;
 pub type UserId = Id;
 pub type PostId = Id;
 pub type TagId = Id;
+pub type UserImageId = Id;
 
+mod image;
 mod post;
 mod relations;
 mod tag;
 mod user;
 
+pub use image::*;
 pub use post::*;
 pub use tag::*;
 pub use user::*;

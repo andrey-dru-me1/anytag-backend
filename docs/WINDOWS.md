@@ -9,8 +9,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 Windows development requires **WSL2 (Windows Subsystem for Linux 2)** because:
 
-1. Nix works best on Linux
-2. Docker requires WSL2 on Windows
+1. Docker requires WSL2 on Windows
+2. Linux toolchains (Rust via rustup, diesel, mise) are first-class on Linux
 3. Many development tools are Linux-first
 
 ## Quick Start (Recommended)
@@ -207,15 +207,14 @@ localhostForwarding=true
 
 ### Why Not Native Windows?
 
-1. Nix on Windows is experimental
+1. Docker requires WSL2 anyway
 2. Diesel PostgreSQL requires libpq (Linux library)
-3. Docker requires WSL2 anyway
-4. Development experience is suboptimal
+3. Development experience is suboptimal
 
 ### If You Must Use Native Windows
 
 1. Install Rust via rustup (<https://rustup.rs/>)
-2. Install diesel-cli: `cargo install diesel_cli --no-default-features --features postgres`
+2. Install mise (<https://mise.jdx.dev/getting-started.html>) and just (<https://just.systems>)
 3. Install PostgreSQL from <https://www.postgresql.org/download/windows/>
 4. Use PowerShell or Git Bash
 
@@ -227,33 +226,28 @@ After setup, verify everything works:
 # In Ubuntu terminal
 cd ~/anytag-backend
 
-# 1. Check Nix
-nix-shell --version
-
-# 2. Check Rust
+# 1. Check tools
+mise --version
+just --version
 rustc --version
 cargo --version
 
-# 3. Check Diesel
-diesel --version
+# 2. Check Diesel (provided by mise; through just so the tool is found)
+just diesel --version
 
-# 4. Check Docker
+# 3. Check Docker
 docker --version
 docker compose --version
 
-# 5. Start environment
-nix develop
-# Should see welcome message with all tools listed
-
-# 6. Test database
-docker compose up -d db
+# 4. Test database
+docker compose up -d postgres
 docker compose ps  # Should show db running
 
-# 7. Test migrations
-diesel migration run
+# 5. Test migrations (through just so DATABASE_URL is set)
+just diesel migration run
 
-# 8. Test build
-cargo build
+# 6. Test build
+just cargo build
 ```
 
 ## Getting Help
@@ -268,19 +262,20 @@ cargo build
 - Check [DEVELOPMENT.md](./DEVELOPMENT.md) for general guidance
 - Create issue in repository
 
-### Nix Issues
+### mise/rustup Issues
 
-- Nix documentation: <https://nixos.org/learn/>
-- Nix Wiki: <https://nixos.wiki/>
+- mise documentation: <https://mise.jdx.dev/>
+- rustup documentation: <https://rustup.rs/>
 
 ## Summary
 
 For Windows development:
 
 1. ✅ Use WSL2 with Ubuntu
-2. ✅ Install Nix inside WSL2
+2. ✅ Install mise + just + rustup inside WSL2
 3. ✅ Use Docker Desktop with WSL2 integration
-4. ✅ Use VS Code with WSL extension
+4. ✅ Use VS Code with WSL + mise extensions
 5. ✅ Store project in WSL2 filesystem (~/projects/)
 
-This gives you a Linux-like development environment with all the reproducibility benefits of Nix.
+This gives you a Linux-like development environment with the same toolchain pinning
+(`rust-toolchain.toml` + `mise.toml`) as any other platform.

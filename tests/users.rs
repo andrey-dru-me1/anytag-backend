@@ -4,7 +4,7 @@
 mod common;
 
 use anyhow::Context;
-use anytag_backend::handlers::ErrCode;
+use anytag_backend::handlers::ApiErrorCode;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use common::TestApp;
@@ -39,7 +39,6 @@ async fn response_json(response: axum::response::Response) -> anyhow::Result<Val
 #[tokio::test]
 async fn test_create_user_success() -> anyhow::Result<()> {
     let test_app = TestApp::new().await?;
-    let app = test_app.router();
     let email = "test_create_success@example.com";
 
     let body = json!({
@@ -48,7 +47,10 @@ async fn test_create_user_success() -> anyhow::Result<()> {
         "password": "CorrectHorseBatteryStaple99!"
     });
 
-    let response = app.oneshot(json_post("/api/v1/users", body)?).await?;
+    let response = test_app
+        .router()
+        .oneshot(json_post("/api/v1/users", body)?)
+        .await?;
     assert_eq!(response.status(), StatusCode::OK);
 
     let json_body = response_json(response).await?;
@@ -61,7 +63,6 @@ async fn test_create_user_success() -> anyhow::Result<()> {
 #[tokio::test]
 async fn test_create_user_invalid_email() -> anyhow::Result<()> {
     let test_app = TestApp::new().await?;
-    let app = test_app.router();
 
     let body = json!({
         "name": "Bad Email",
@@ -69,18 +70,20 @@ async fn test_create_user_invalid_email() -> anyhow::Result<()> {
         "password": "CorrectHorseBatteryStaple99!"
     });
 
-    let response = app.oneshot(json_post("/api/v1/users", body)?).await?;
+    let response = test_app
+        .router()
+        .oneshot(json_post("/api/v1/users", body)?)
+        .await?;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let json_body = response_json(response).await?;
-    assert_eq!(json_body["code"], ErrCode::InvalidEmail.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::InvalidEmail.as_ref());
     Ok(())
 }
 
 #[tokio::test]
 async fn test_create_user_weak_password() -> anyhow::Result<()> {
     let test_app = TestApp::new().await?;
-    let app = test_app.router();
 
     let body = json!({
         "name": "Weak PW",
@@ -88,11 +91,14 @@ async fn test_create_user_weak_password() -> anyhow::Result<()> {
         "password": "12345678"
     });
 
-    let response = app.oneshot(json_post("/api/v1/users", body)?).await?;
+    let response = test_app
+        .router()
+        .oneshot(json_post("/api/v1/users", body)?)
+        .await?;
     assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
 
     let json_body = response_json(response).await?;
-    assert_eq!(json_body["code"], ErrCode::WeakPassword.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::WeakPassword.as_ref());
     Ok(())
 }
 
@@ -119,11 +125,11 @@ async fn test_create_user_duplicate_email() -> anyhow::Result<()> {
         .router()
         .oneshot(json_post("/api/v1/users", body)?)
         .await?;
-    // DB_QUERY_ERROR via From<(ErrCode, String)> defaults to 500
+    // DB_QUERY_ERROR via From<(ApiErrorCode, String)> defaults to 500
     assert_eq!(response2.status(), StatusCode::INTERNAL_SERVER_ERROR);
 
     let json_body = response_json(response2).await?;
-    assert_eq!(json_body["code"], ErrCode::DbQueryError.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::DbQueryError.as_ref());
     Ok(())
 }
 
@@ -199,7 +205,7 @@ async fn test_login_user_wrong_password() -> anyhow::Result<()> {
     assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     let json_body = response_json(response).await?;
-    assert_eq!(json_body["code"], ErrCode::InvalidCredentials.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::InvalidCredentials.as_ref());
     Ok(())
 }
 
@@ -220,6 +226,6 @@ async fn test_login_user_not_found() -> anyhow::Result<()> {
 
     let json_body = response_json(response).await?;
     // Same error code as wrong password (security best practice)
-    assert_eq!(json_body["code"], ErrCode::InvalidCredentials.as_ref());
+    assert_eq!(json_body["code"], ApiErrorCode::InvalidCredentials.as_ref());
     Ok(())
 }

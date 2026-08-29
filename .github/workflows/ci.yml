@@ -12,7 +12,21 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  DATABASE_URL: postgres://postgres@localhost:5432/anytag_test
+
+  BASE_URL: http://localhost:3000
+
+  DB_TYPE: postgres
+  DB_HOST: localhost
+  DB_PORT: 5432
+
+  DB_USER: anytag_ci
+  DB_PASS: ${{ secrets.DB_PASS }}
+  DB_NAME: anytag_ci
+
+  S3_BASE_URL: http://localhost:8333
+  S3_BUCKET: anytag-ci-bucket
+  AWS_ACCESS_KEY_ID: anytag_ci
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
 jobs:
   test-nix:
@@ -21,21 +35,6 @@ jobs:
     permissions:
       id-token: write
       contents: read
-
-    services:
-      postgres:
-        image: postgres:18.3-alpine3.23
-        env:
-          POSTGRES_HOST_AUTH_METHOD: trust
-          POSTGRES_USER: postgres
-          POSTGRES_DB: anytag_test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
 
     steps:
       - name: Checkout code
@@ -52,6 +51,12 @@ jobs:
             diesel --version
           "
 
+      - name: Start PostgreSQL docker service
+        run: nix develop --command docker compose up -d postgres
+
+      - name: Start SeaweedFS S3 docker service
+        run: nix develop --command docker compose up -d seaweed
+
       - name: Wait for PostgreSQL
         run: |
           for i in {1..30}; do
@@ -60,6 +65,17 @@ jobs:
               break
             fi
             echo "Waiting for PostgreSQL... ($i/30)"
+            sleep 1
+          done
+
+      - name: Wait for SeaweedFS S3
+        run: |
+          for i in {1..30}; do
+            if curl -s -o /dev/null -m 2 http://localhost:8333/; then
+              echo "SeaweedFS is ready"
+              break
+            fi
+            echo "Waiting for SeaweedFS... ($i/30)"
             sleep 1
           done
 

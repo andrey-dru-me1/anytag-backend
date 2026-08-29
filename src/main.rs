@@ -2,19 +2,23 @@
 // Copyright (C) 2026 The Anytag Backend Authors
 
 use anyhow::Context;
-use anytag_backend::{db, router};
+use anytag_backend::{
+    config::{AppConfig, AppState},
+    router,
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // Initialize tracing
     tracing_subscriber::fmt::init();
 
-    // Establish database connection pool
-    let pool = db::establish_connection_pool()?;
+    // Build shared application state: config, DB pool, and S3 client
+    let config = AppConfig::from_dotenv()?;
+    let state = AppState::from_config(config).await?;
     tracing::info!("Database connection pool established");
 
     // Create router
-    let app = router::create_router(pool);
+    let app = router::create_router(state);
 
     // Start server
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));

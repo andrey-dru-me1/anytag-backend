@@ -7,38 +7,35 @@ use diesel_async::RunQueryDsl;
 use email_address::EmailAddress;
 use zxcvbn::{Score, zxcvbn};
 
-use crate::db::DbPool;
+use crate::config::AppState;
 use crate::dto::{CreateUserRequest, LoginRequest, LoginResponse, UserCreatedResponse};
-use crate::handlers::{ErrCode, HandlerErr};
+use crate::handlers::{ApiError, ApiErrorCode};
 use crate::models::{NewUser, User};
 use crate::schema::users::dsl::*;
 
-use rand_core::OsRng;
-
 use argon2::{
     Argon2,
-    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 
 fn hash_password(password: &str) -> Result<String, String> {
-    let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
 
     argon2
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|e| format!("argon2 password hashing failed: {}", e))
 }
 
 /// Validate email format.
 ///
-/// Returns `Ok(())` if the email is valid, or a `HandlerErr` with
-/// [`ErrCode::InvalidEmail`] and status [`StatusCode::UNPROCESSABLE_ENTITY`].
-fn validate_email(input: &str) -> Result<(), HandlerErr> {
+/// Returns `Ok(())` if the email is valid, or an `ApiError` with [`ApiErrorCode::InvalidEmail`]
+/// and status [`StatusCode::UNPROCESSABLE_ENTITY`].
+fn validate_email(input: &str) -> Result<(), ApiError> {
     if !EmailAddress::is_valid(input) {
-        return Err(HandlerErr::builder()
+        return Err(ApiError::builder()
             .http_status(StatusCode::UNPROCESSABLE_ENTITY)
-            .code(ErrCode::InvalidEmail)
+            .code(ApiErrorCode::InvalidEmail)
             .context("email format validation failed")
             .message("Invalid email")
             .build());
@@ -49,22 +46,22 @@ fn validate_email(input: &str) -> Result<(), HandlerErr> {
 /// Validate password strength using zxcvbn.
 ///
 /// Returns `Ok(())` if the password scores at least [`Score::Three`],
-/// or a `HandlerErr` with [`ErrCode::WeakPassword`] and
+/// or an `ApiError` with [`ApiErrorCode::WeakPassword`] and
 /// status [`StatusCode::UNPROCESSABLE_ENTITY`].
 fn validate_password_strength(
     password: &str,
     user_name: &str,
     user_email: &str,
-) -> Result<(), HandlerErr> {
+) -> Result<(), ApiError> {
     let estimate = zxcvbn(password, &[user_name, user_email]);
     if estimate.score() < Score::Three {
         let mut message = "The password is weak.".to_string();
         if let Some(feedback) = estimate.feedback() {
             message = format!("{} {}", message, feedback);
         }
-        return Err(HandlerErr::builder()
+        return Err(ApiError::builder()
             .http_status(StatusCode::UNPROCESSABLE_ENTITY)
-            .code(ErrCode::WeakPassword)
+            .code(ApiErrorCode::WeakPassword)
             .context(format!(
                 "password complexity check failed: zxcvbn score is {}",
                 estimate.score()
@@ -77,16 +74,16 @@ fn validate_password_strength(
 
 /// Handler for creating a new user
 pub async fn create_user(
-    State(pool): State<DbPool>,
+    State(state): State<AppState>,
     Json(payload): Json<CreateUserRequest>,
-) -> Result<impl IntoResponse, HandlerErr> {
+) -> Result<impl IntoResponse, ApiError> {
     validate_email(&payload.email)?;
     validate_password_strength(&payload.password, &payload.name, &payload.email)?;
 
-    let mut conn = pool.get().await?;
+    let mut conn = state.db_pool.get().await?;
 
     let password_hashed =
-        hash_password(&payload.password).map_err(|e| (ErrCode::PasswordHashError, e))?;
+        hash_password(&payload.password).map_err(|e| (ApiErrorCode::PasswordHashError, e))?;
 
     let new_user = NewUser {
         name: payload.name,
@@ -100,7 +97,7 @@ pub async fn create_user(
         .await
         .map_err(|e| {
             (
-                ErrCode::DbQueryError,
+                ApiErrorCode::DbQueryError,
                 format!("failed to create new user: {}", e),
             )
         })?;
@@ -113,14 +110,14 @@ pub async fn create_user(
 }
 
 pub async fn login_user(
-    State(pool): State<DbPool>,
+    State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
-) -> Result<impl IntoResponse, HandlerErr> {
-    let mut conn = pool.get().await?;
+) -> Result<impl IntoResponse, ApiError> {
+    let mut conn = state.db_pool.get().await?;
 
-    let err_builder = HandlerErr::builder()
+    let err_builder = ApiError::builder()
         .http_status(StatusCode::UNAUTHORIZED)
-        .code(ErrCode::InvalidCredentials)
+        .code(ApiErrorCode::InvalidCredentials)
         .message("Invalid email or password");
 
     let user: User = users
@@ -165,7 +162,7 @@ pub async fn login_user(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use argon2::password_hash::PasswordHash;
+    use argon2::password_hash::phc::PasswordHash;
     use axum::http::StatusCode;
 
     // -----------------------------------------------------------------------
@@ -217,14 +214,14 @@ mod tests {
     fn test_validate_email_invalid() {
         let err = validate_email("not-an-email").unwrap_err();
         assert_eq!(err.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(err.err_code().as_ref(), "INVALID_EMAIL");
+        assert_eq!(err.error_code().as_ref(), "INVALID_EMAIL");
     }
 
     #[test]
     fn test_validate_email_empty() {
         let err = validate_email("").unwrap_err();
         // An empty string is not a valid email
-        assert_eq!(err.err_code().as_ref(), "INVALID_EMAIL");
+        assert_eq!(err.error_code().as_ref(), "INVALID_EMAIL");
     }
 
     // -----------------------------------------------------------------------
@@ -249,7 +246,7 @@ mod tests {
     fn test_validate_password_strength_weak() {
         let err = validate_password_strength("12345678", "bob", "bob@example.com").unwrap_err();
         assert_eq!(err.status(), StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(err.err_code().as_ref(), "WEAK_PASSWORD");
+        assert_eq!(err.error_code().as_ref(), "WEAK_PASSWORD");
     }
 
     #[test]

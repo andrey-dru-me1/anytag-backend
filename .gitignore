@@ -24,6 +24,9 @@ target/
 *.profraw
 *.profdata
 
+# Generated coverage report (see cargo llvm-cov)
+lcov.info
+
 # Rust documentation
 /target/doc/
 
@@ -176,3 +179,6 @@ temp/
 # Files that might appear on external disk
 .Spotlight-V100
 .Trashes
+
+# Agent specific directories
+.kilo

@@ -5,15 +5,15 @@ mod common;
 
 use anyhow::Context;
 use anytag_backend::models::NewTag;
-use anytag_backend::router::create_router;
 use anytag_backend::schema::tags::dsl;
 use axum::body::Body;
 use axum::http::StatusCode;
-use common::TestTransaction;
 use diesel_async::RunQueryDsl;
 use http_body_util::BodyExt;
 use serde_json::Value;
 use tower::ServiceExt;
+
+use crate::common::TestApp;
 
 fn json_get(uri: &str) -> anyhow::Result<axum::http::Request<Body>> {
     axum::http::Request::builder()
@@ -57,12 +57,9 @@ async fn insert_user(conn: &mut diesel_async::AsyncPgConnection) -> anyhow::Resu
 
 #[tokio::test]
 async fn test_list_tags_returns_ok() -> anyhow::Result<()> {
-    let tx = TestTransaction::new().await?;
-    let pool = tx.pool();
+    let test_app = TestApp::new().await?;
 
-    let app = create_router(pool);
-
-    let response = app.oneshot(json_get("/api/v1/tags")?).await?;
+    let response = test_app.router().oneshot(json_get("/api/v1/tags")?).await?;
     assert_eq!(response.status(), StatusCode::OK);
 
     let json_body = response_json(response).await?;
@@ -72,12 +69,15 @@ async fn test_list_tags_returns_ok() -> anyhow::Result<()> {
 
 #[tokio::test]
 async fn test_list_tags_includes_inserted_data() -> anyhow::Result<()> {
-    let tx = TestTransaction::new().await?;
-    let pool = tx.pool();
+    let test_app = TestApp::new().await?;
 
     // Insert a user and some tags within the transaction.
     {
-        let mut conn = pool.get().await.context("Failed to get connection")?;
+        let mut conn = test_app
+            .db_pool
+            .get()
+            .await
+            .context("Failed to get connection")?;
         let user_id = insert_user(&mut conn).await?;
 
         let new_tags = vec![
@@ -100,9 +100,7 @@ async fn test_list_tags_includes_inserted_data() -> anyhow::Result<()> {
             .context("Failed to insert test tags")?;
     }
 
-    let app = create_router(pool);
-
-    let response = app.oneshot(json_get("/api/v1/tags")?).await?;
+    let response = test_app.router().oneshot(json_get("/api/v1/tags")?).await?;
     assert_eq!(response.status(), StatusCode::OK);
 
     let json_body = response_json(response).await?;

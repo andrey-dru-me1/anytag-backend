@@ -17,62 +17,75 @@ Anytag is a social platform where users can:
 - Create and manage tags
 - Subscribe to tags and other users
 - Control visibility of tags to specific users
+- Upload and retrieve media images (stored in an S3-compatible object store)
 
 ## Tech Stack
 
 - **Language**: Rust 2024 Edition
-- **Framework**: Standard library with Diesel ORM
+- **Framework**: Axum with Diesel ORM
 - **Database**: PostgreSQL 18.3
+- **Object Storage**: S3-compatible (local SeaweedFS via Docker)
 - **Containerization**: Docker & Docker Compose
-- **ORM**: Diesel 2.3.6 with PostgreSQL support
-- **Environment Management**: Nix + direnv (deterministic development environment)
+- **ORM**: Diesel 2.3 with diesel-async (async PostgreSQL support)
+- **Environment Management**: docker + mise + just + rustup (Nix kept as deprecated alternative)
 
 ## Quick Start
 
 ### 1. Prerequisites
 
-- [Nix](https://nixos.org/) (recommended) or manual Rust setup
-- Docker & Docker Compose
+Install these tools once on your machine:
 
-### 2. Setup with Nix (Recommended)
+- [Docker](https://www.docker.com) — runs PostgreSQL and SeaweedFS (local S3-compatible storage)
+- [mise](https://mise.jdx.dev) — manages tool versions and environment variables (installs `diesel-cli` and `reuse`, constructs `DATABASE_URL`)
+- [just](https://just.systems) — command runner wrapping `cargo`, `diesel`, `test`, and `watch`
+- [rustup](https://rustup.rs/) — Rust toolchain manager; reads `rust-toolchain.toml` automatically
+
+### 2. Setup (Recommended: mise + just)
 
 ```bash
-# Enter the development environment
-nix develop
-
 # Copy environment configuration
 cp .env.example .env
 
-# Start the database
-docker compose up -d db
+# Install mise-managed tools (diesel-cli, reuse) and export the environment
+mise install
 
-# Setup database with migrations
-diesel database setup
-```
+# Start the database and local S3-compatible storage (SeaweedFS)
+docker compose up -d
 
-### 3. Manual Setup (Alternative)
+# Setup database with migrations (DATABASE_URL is constructed automatically by mise)
+just diesel database setup
 
-If not using Nix:
-
-1. Install Rust via [rustup](https://rustup.rs/)
-2. Install diesel-cli: `cargo install diesel_cli --no-default-features --features postgres`
-3. Install PostgreSQL development libraries for your platform
-4. Copy environment configuration: `cp .env.example .env`
-5. Start the database: `docker compose up -d db`
-6. Setup database with migrations: `diesel database setup`
-
-### 4. Build and Run
-
-```bash
 # Build the project
-cargo build
+just cargo build
 
 # Run the development server with hot reload (restarts on file changes)
-cargo watch -x run
+just watch
 
 # Run tests
-cargo test
+just test
 ```
+
+> Every `just` recipe runs through `mise x -- ...`, so `cargo`, `diesel`, and
+> `reuse` always see the correct environment (`DATABASE_URL` constructed from `.env`).
+> You can equally run `cargo`, `diesel`, `reuse` directly — but only inside a
+> mise-activated shell/terminal.
+
+### 3. Nix (Deprecated Alternative)
+
+The previous Nix-based setup still works but is deprecated:
+
+```bash
+nix develop
+# or with direnv: cp .envrc.example .envrc && direnv allow
+```
+
+### 4. IDE Notes
+
+Install the **mise VS Code extension** and enable `mise.configureExtensionsAutomatically`.
+mise then makes `cargo`, `diesel`, `reuse`, and the pinned Rust toolchain available
+directly in the VS Code terminal — no `just`/`mise x --` prefix needed — and
+rust-analyzer's **Run (test) / Debug (test)** buttons work with the environment
+loaded (`DATABASE_URL` constructed). See [docs/IDE_SETUP.md](docs/IDE_SETUP.md).
 
 ## Project Structure
 
@@ -80,7 +93,7 @@ The project follows a standard Rust web application structure with separate modu
 
 ## Database
 
-The application uses 7 main tables:
+The application uses 9 main tables:
 
 1. **users** - User accounts with authentication
 2. **posts** - User-created posts
@@ -89,26 +102,41 @@ The application uses 7 main tables:
 5. **user_tag_subscriptions** - Users subscribing to tags
 6. **user_user_subscriptions** - Users following other users
 7. **tag_user_visibility** - Custom visibility settings for tags
+8. **image_sources** - Deduplicated image content metadata hosted in S3
+9. **user_images** - User-uploaded images referencing an `image_sources` entry
+
+For details on the media/image subsystem (endpoints, storage layout, and SeaweedFS), see [docs/MEDIA.md](docs/MEDIA.md).
 
 ## Common Commands
 
+> **Note on bare commands.** Bare `cargo`/`diesel` commands only see the mise-provided
+> tools and the constructed `DATABASE_URL` inside a **mise-activated shell** — either the
+> integrated VS Code terminal with the mise extension (`mise.configureExtensionsAutomatically`)
+> or after appending `eval "$(mise activate)"` to your shell config. To be safe without
+> activation, prefix with `just` (the `just` wrappers run through `mise x -- …`).
+
 ```bash
 # Development
-cargo check          # Check for compilation errors
-cargo test           # Run tests
-cargo fmt           # Format code
-cargo clippy        # Lint code
-cargo watch -x run   # Development server with hot reload (restarts on save)
-cargo watch -x test  # Run tests automatically on file changes
+just cargo check          # Check for compilation errors
+just cargo test           # Run tests
+just cargo fmt            # Format code
+just cargo clippy         # Lint code
+just watch                # Development server with hot reload (restarts on save)
+just cargo watch -x test  # Run tests automatically on file changes
+
+# Test coverage
+just cargo llvm-cov --lcov --output-path lcov.info  # Generate an LCOV report for editors/IDEs
+just cargo llvm-cov --open                           # Open an HTML coverage report in the browser
+just cargo llvm-cov                                  # Print a coverage summary to the terminal
 
 # Database
-diesel migration run    # Run pending migrations
-diesel migration revert # Revert last migration
-diesel migration list   # List all migrations
+just diesel migration run    # Run pending migrations
+just diesel migration revert # Revert last migration
+just diesel migration list   # List all migrations
 
 # Docker
-docker compose up -d db    # Start database
-docker compose down -v     # Stop and remove database with volumes
+docker compose up -d        # Start database and SeaweedFS (S3-compatible) storage
+docker compose down -v      # Stop and remove containers with volumes
 ```
 
 ## Documentation
@@ -117,11 +145,12 @@ Detailed documentation is available in the `docs/` directory:
 
 - **[Development Guide](docs/DEVELOPMENT.md)** - Development workflow, project structure, and environment setup
 - **[Troubleshooting](docs/TROUBLESHOOTING.md)** - Common issues and CI/CD overview
-- **[Dependency Management](docs/DEPENDENCIES.md)** - Adding and updating Rust and Nix dependencies
+- **[Dependency Management](docs/DEPENDENCIES.md)** - Adding and updating Rust dependencies, how mise manages tool versions
 - **[IDE Setup](docs/IDE_SETUP.md)** - VS Code, Zed, and IntelliJ/CLion configuration
-- **[REUSE Compliance](docs/REUSE.md)** - License management and SPDX headers
+- **[REUSE Compliance](docs/REUSE.md)** - License management and SPDX headers (reuse runs via mise)
 - **[Git Workflow](docs/GIT_WORKFLOW.md)** - Branch strategy, commit conventions, and PR guidelines
 - **[Windows Setup](docs/WINDOWS.md)** - Windows-specific development setup with WSL2
+- **[Media & S3 Storage](docs/MEDIA.md)** - Image upload/retrieval endpoints and object storage layout
 - **Database Schema** - See `migrations/` directory for SQL definitions
 
 ## Troubleshooting
@@ -129,7 +158,8 @@ Detailed documentation is available in the `docs/` directory:
 Common issues and solutions:
 
 - **"Connection refused"**: Ensure Docker is running and database container is up
-- **"diesel command not found"**: Ensure you're inside the Nix shell (`nix develop`)
+- **"diesel command not found"**: Run `mise install` first, or use the `just diesel ...` wrappers
+- **"DATABASE_URL is not set"**: Ensure `.env` exists (`cp .env.example .env`) and you run the command inside mise (`mise x -- ...`, `just ...`, or a mise-activated VS Code terminal)
 - **"ld: library 'pq' not found"**: Install PostgreSQL development libraries for your platform
 
 For detailed troubleshooting, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).

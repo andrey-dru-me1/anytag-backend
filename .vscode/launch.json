@@ -1,0 +1,78 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug unit tests in library 'anytag_backend'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test"
+                ]
+            }
+        },
+        {
+            "name": "Debug executable 'anytag-backend'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "run",
+                    "--bin=anytag-backend"
+                ]
+            },
+            "sourceLanguages": ["rust"],
+            "initCommands": [
+                "settings set target.inline-breakpoint-strategy always"
+            ],
+            "args": []
+        },
+        {
+            "name": "Debug unit tests in executable 'anytag-backend'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin=anytag-backend"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'posts'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=posts"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'tags'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=tags"
+                ]
+            }
+        },
+        {
+            "name": "Debug integration test 'users'",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--test=users"
+                ]
+            }
+        }
+    ]
+}

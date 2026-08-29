@@ -11,7 +11,7 @@ use axum::{
     response::IntoResponse,
 };
 use diesel::{ExpressionMethods, QueryDsl};
-use diesel_async::{AsyncConnection, RunQueryDsl, pg::AsyncPgConnection};
+use diesel_async::{AsyncConnection, RunQueryDsl};
 use image::ImageReader;
 use sha2::{Digest, Sha256};
 use tokio_util::io::ReaderStream;
@@ -398,16 +398,15 @@ fn parse_image_id(image_name: &str) -> Result<i32, ApiError> {
     })
 }
 
-async fn get_image_by_name(
-    image_name: String,
-    conn: &mut AsyncPgConnection,
-) -> Result<(UserImage, ImageSource), ApiError> {
+async fn get_image_by_name(image_name: String, pool: &DbPool) -> Result<ImageSource, ApiError> {
     let image_id = parse_image_id(&image_name)?;
+    let mut conn = pool.get().await?;
 
     user_images::table
         .inner_join(image_sources::table)
         .filter(user_images::id.eq(image_id))
-        .first::<(UserImage, ImageSource)>(conn)
+        .select(image_sources::all_columns)
+        .first(&mut conn)
         .await
         .map_err(|e| {
             ApiError::builder()
@@ -447,8 +446,7 @@ pub async fn get_image(
     State(state): State<AppState>,
     Path(image_name): Path<String>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut conn = state.db_pool.get().await?;
-    let (_user_image, image_source) = get_image_by_name(image_name, &mut conn).await?;
+    let image_source = get_image_by_name(image_name, &state.db_pool).await?;
 
     let s3_object = state
         .s3_client

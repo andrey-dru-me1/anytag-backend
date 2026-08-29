@@ -3,7 +3,6 @@
 
 use std::io::Cursor;
 
-use anyhow::Context;
 use axum::{
     Json,
     body::Bytes,
@@ -218,48 +217,21 @@ async fn insert_image(
     s3_bucket_name: &str,
     data: Bytes,
 ) -> Result<UserImage, ApiError> {
-    // Upload to S3 before the DB transaction. The key is content-addressed, so
-    // an object may already exist from a prior upload of identical bytes; in
-    // that case `created` is `false` and the object must NOT be deleted below
-    // even if the DB insert fails, because other `user_images` rows may still
-    // reference it.
-    //
-    // Only an object we just created (`created == true`) can be safely removed
-    // when the inserts below fail: a 200 PUT means we are the ones that placed
-    // it, so no committed row can reference it yet (a concurrent uploader of
-    // the same bytes gets 412 and treats the object as pre-existing, so it does
-    // not own it).
-    let created =
-        upload_s3_object(s3_client, s3_bucket_name, new_image_source.s3_key, data).await?;
+    // Upload to S3 before the DB transaction. This can orphan an object if the
+    // inserts below fail, but that is harmless: an orphaned object never fails a
+    // user request (unlike an orphaned DB row, which would 404/500 on
+    // retrieval), and because the key is content-addressed a retrying uploader
+    // will reuse it. See `upload_s3_object` for why the upload itself is
+    // idempotent.
+    upload_s3_object(s3_client, s3_bucket_name, new_image_source.s3_key, data).await?;
 
     // A single upsert: `ON CONFLICT ... DO UPDATE` inserts the row if absent and
     // returns the existing one otherwise. Two concurrent uploads of the same
     // content are resolved by the `s3_key` UNIQUE index: the loser blocks until
     // the winner commits, then `DO UPDATE` returns the winner's row. No advisory
     // lock or explicit fetch is needed.
-    let user_image =
-        match insert_db_image_rows(pool, partial_new_user_image, new_image_source).await {
-            Ok(row) => row,
-            Err(e) => {
-                if created
-                    && let Err(e) =
-                        delete_s3_object(s3_client, s3_bucket_name, new_image_source.s3_key).await
-                {
-                    tracing::error!("could not delete orphaned s3 object: {e}");
-                }
-                return Err(e);
-            }
-        };
-
-    Ok(user_image)
-}
-
-async fn insert_db_image_rows(
-    pool: &DbPool,
-    partial_new_user_image: &PartialNewUserImage<'_>,
-    new_image_source: &NewImageSource<'_>,
-) -> Result<UserImage, ApiError> {
-    pool.get()
+    let user_image = pool
+        .get()
         .await?
         .transaction::<_, ApiError, _>(async |conn| {
             let image_source = diesel::insert_into(image_sources::table)
@@ -295,25 +267,19 @@ async fn insert_db_image_rows(
                 })?;
             Ok(user_image)
         })
-        .await
+        .await?;
+
+    Ok(user_image)
 }
 
 // ---------- s3 management ----------
 
-/// Uploads `data` to S3 under `file_name` and reports whether the object was
-/// newly created by this call.
-///
-/// The key is content-addressed, so an identical object may already exist. The
-/// PUT is create-only (`if_none_match("*")`): a fresh key returns 200, an
-/// existing one returns 412. The return value is `true` only when this call
-/// created the object (200) — the caller uses it to decide whether the object
-/// is safe to delete on a subsequent DB failure.
 async fn upload_s3_object(
     client: &aws_sdk_s3::Client,
     bucket_name: &str,
     file_name: &str,
     data: Bytes,
-) -> Result<bool, ApiError> {
+) -> Result<(), ApiError> {
     let result = client
         .put_object()
         .bucket(bucket_name)
@@ -327,14 +293,14 @@ async fn upload_s3_object(
         .await;
 
     match result {
-        Ok(_) => Ok(true),
+        Ok(_) => Ok(()),
         Err(e)
             if e.as_service_error()
                 .map(|se| se.code() == Some("PreconditionFailed"))
                 .unwrap_or(false) =>
         {
             // Existing object: identical content, nothing to write.
-            Ok(false)
+            Ok(())
         }
         Err(e) => Err(ApiError::builder()
             .code(ApiErrorCode::S3StorageError)
@@ -344,21 +310,6 @@ async fn upload_s3_object(
             ))
             .build()),
     }
-}
-
-async fn delete_s3_object(
-    client: &aws_sdk_s3::Client,
-    bucket_name: &str,
-    s3_key: &str,
-) -> anyhow::Result<()> {
-    client
-        .delete_object()
-        .bucket(bucket_name)
-        .key(s3_key)
-        .send()
-        .await
-        .map(|_| ())
-        .context("failed to delete s3 object")
 }
 
 fn check_file_name_length(file_name: &str) -> Result<(), ApiError> {

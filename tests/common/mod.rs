@@ -9,8 +9,6 @@ use uuid::Uuid;
 
 pub struct TestApp {
     pub db_pool: config::DbPool,
-    pub s3_client: aws_sdk_s3::Client,
-    pub config: config::AppConfig,
     router: axum::Router,
 }
 
@@ -24,12 +22,10 @@ impl TestApp {
         let app_state = config::AppState {
             db_pool: db::setup_test_db_pool(&config.database_url).await?,
             s3_client: s3::mock_s3_client(),
-            config: config.clone(),
+            config,
         };
         Ok(Self {
             db_pool: app_state.db_pool.clone(),
-            s3_client: app_state.s3_client.clone(),
-            config,
             router: router::create_router(app_state),
         })
     }
@@ -58,13 +54,11 @@ impl TestApp {
         let app_state = config::AppState {
             db_pool: db::setup_test_db_pool(&config.database_url).await?,
             s3_client: config.s3.build_client().await?,
-            config: config.clone(),
+            config,
         };
         let s3_client = app_state.s3_client.clone();
         let test_app = Self {
             db_pool: app_state.db_pool.clone(),
-            s3_client: app_state.s3_client.clone(),
-            config,
             router: router::create_router(app_state),
         };
 

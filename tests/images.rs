@@ -4,7 +4,6 @@
 mod common;
 
 use anyhow::Context;
-use anytag_backend::config::AppConfig;
 use anytag_backend::handlers::ApiErrorCode;
 use anytag_backend::{config, schema};
 use axum::body::Body;
@@ -511,41 +510,6 @@ async fn test_reupload_when_object_remains_after_db_row_deleted() -> anyhow::Res
             response_bytes(get).await?,
             data,
             "retrieved bytes must match the upload"
-        );
-
-        Ok(())
-    })
-    .await
-}
-
-#[tokio::test]
-async fn test_orphan_s3_object_deleted() -> anyhow::Result<()> {
-    // Point the pool at an unreachable database. `upload_image` puts the object
-    // to S3 first, then fails to obtain a DB connection; the app must delete the
-    // just-uploaded object rather than leaving an orphan behind.
-    let mut config = AppConfig::from_dotenv()?;
-    config.database_url = "postgres://wrong:user@wrong:host/wrong".to_string();
-    TestApp::from_config_with_temporary_s3_bucket(config, async |test_app| -> anyhow::Result<()> {
-        let response = test_app
-            .router()
-            .oneshot(multipart_upload(&png_bytes(), "photo.png")?)
-            .await?;
-        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
-
-        let json = response_json(response).await?;
-        assert_eq!(json["code"], ApiErrorCode::DbConnectionError.as_ref());
-
-        // The upload reached S3, but the DB insert failed, so the app must have
-        // deleted the orphaned object: the freshly created bucket must be empty.
-        let objects = test_app
-            .s3_client
-            .list_objects_v2()
-            .bucket(&test_app.config.s3.media_bucket_name)
-            .send()
-            .await?;
-        assert!(
-            objects.contents().is_empty(),
-            "orphaned S3 object must be deleted after a failed DB insert"
         );
 
         Ok(())

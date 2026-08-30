@@ -25,7 +25,7 @@ pub struct Claims {
     pub token_type: TokenType,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum JwtError {
     InvalidToken,
     ExpiredToken,
@@ -115,4 +115,99 @@ pub fn hash_token(token: &str) -> String {
         .iter()
         .map(|byte| format!("{:02x}", byte))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn jwt_config(secret: &str) -> JwtConfig {
+        JwtConfig {
+            secret: secret.to_string(),
+            access_token_ttl_minutes: 15,
+            refresh_token_ttl_days: 30,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // create and verify tokens
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_create_and_verify_access_token() {
+        let config = jwt_config("test-access-secret");
+
+        let token = create_access_token(42, &config).expect("access token creation should succeed");
+        let claims = verify_token(&token, TokenType::Access, &config)
+            .expect("access token verification should succeed");
+
+        assert_eq!(claims.sub, 42);
+        assert_eq!(claims.token_type, TokenType::Access);
+        assert!(claims.exp > claims.iat);
+    }
+
+    #[test]
+    fn test_create_and_verify_refresh_token() {
+        let config = jwt_config("test-refresh-secret");
+
+        let token =
+            create_refresh_token(7, &config).expect("refresh token creation should succeed");
+        let claims = verify_token(&token, TokenType::Refresh, &config)
+            .expect("refresh token verification should succeed");
+
+        assert_eq!(claims.sub, 7);
+        assert_eq!(claims.token_type, TokenType::Refresh);
+        assert!(claims.exp > claims.iat);
+    }
+
+    #[test]
+    fn test_verify_token_rejects_wrong_type() {
+        let config = jwt_config("test-token-type-secret");
+        let token =
+            create_refresh_token(7, &config).expect("refresh token creation should succeed");
+
+        let result = verify_token(&token, TokenType::Access, &config);
+
+        assert_eq!(result.unwrap_err(), JwtError::WrongTokenType);
+    }
+
+    #[test]
+    fn test_verify_token_rejects_different_secret() {
+        let signing_config = jwt_config("signing-secret");
+        let verification_config = jwt_config("different-secret");
+        let token =
+            create_access_token(42, &signing_config).expect("access token creation should succeed");
+
+        let result = verify_token(&token, TokenType::Access, &verification_config);
+
+        assert_eq!(result.unwrap_err(), JwtError::InvalidToken);
+    }
+
+    #[test]
+    fn test_verify_token_rejects_expired_token() {
+        let config = jwt_config("test-expired-secret");
+        let token = create_token(42, TokenType::Access, Duration::minutes(-5), &config.secret)
+            .expect("expired token creation should succeed");
+
+        let result = verify_token(&token, TokenType::Access, &config);
+
+        assert_eq!(result.unwrap_err(), JwtError::ExpiredToken);
+    }
+
+    // -----------------------------------------------------------------------
+    // hash_token
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_hash_token_known_vector() {
+        assert_eq!(
+            hash_token("refresh-token"),
+            "0eb17643d4e9261163783a420859c92c7d212fa9624106a12b510afbec266120"
+        );
+    }
+
+    #[test]
+    fn test_hash_token_changes_with_input() {
+        assert_ne!(hash_token("first-token"), hash_token("second-token"));
+    }
 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 The Anytag Backend Authors
 
-use std::env;
+use std::{env, fmt};
 
 use anyhow::Context;
 use aws_config::meta::region::RegionProviderChain;
@@ -16,6 +16,33 @@ use diesel_async::{
 };
 
 pub type DbPool = Pool<AsyncPgConnection>;
+
+#[derive(Clone)]
+pub struct JwtConfig {
+    pub secret: String,
+    pub access_token_ttl_minutes: i64,
+    pub refresh_token_ttl_days: i64,
+}
+
+impl JwtConfig {
+    pub fn from_env() -> anyhow::Result<Self> {
+        Ok(Self {
+            secret: load_env("JWT_SECRET")?,
+            access_token_ttl_minutes: load_i64_env_or_default("ACCESS_TOKEN_TTL_MINUTES", 15)?,
+            refresh_token_ttl_days: load_i64_env_or_default("REFRESH_TOKEN_TTL_DAYS", 30)?,
+        })
+    }
+}
+
+impl fmt::Debug for JwtConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("JwtConfig")
+            .field("secret", &"[REDACTED]")
+            .field("access_token_ttl_minutes", &self.access_token_ttl_minutes)
+            .field("refresh_token_ttl_days", &self.refresh_token_ttl_days)
+            .finish()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct S3Config {
@@ -78,6 +105,7 @@ impl S3Config {
 #[derive(Clone, Debug)]
 pub struct AppConfig {
     pub s3: S3Config,
+    pub jwt: JwtConfig,
     pub database_url: String,
     pub base_url: String,
 }
@@ -86,6 +114,7 @@ impl AppConfig {
     pub fn from_env() -> anyhow::Result<AppConfig> {
         Ok(Self {
             s3: S3Config::from_env()?,
+            jwt: JwtConfig::from_env()?,
             database_url: load_env("DATABASE_URL")?,
             base_url: load_env("BASE_URL")?,
         })
@@ -130,4 +159,11 @@ impl AppState {
 
 fn load_env(var: &'static str) -> anyhow::Result<String> {
     env::var(var).context(format!("{var} must be set in .env or environment"))
+}
+
+fn load_i64_env_or_default(var: &'static str, default: i64) -> anyhow::Result<i64> {
+    env::var(var)
+        .unwrap_or_else(|_| default.to_string())
+        .parse()
+        .context(format!("{var} must be a valid integer"))
 }

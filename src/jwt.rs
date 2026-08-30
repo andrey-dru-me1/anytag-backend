@@ -5,9 +5,10 @@ use serde::{Deserialize, Serialize};
 
 use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};
-use std::env;
 
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, errors::ErrorKind};
+
+use crate::config::JwtConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -31,24 +32,6 @@ pub enum JwtError {
     WrongTokenType,
 }
 
-fn jwt_secret() -> String {
-    env::var("JWT_SECRET").expect("JWT_SECRET must be set")
-}
-
-fn access_token_ttl_minutes() -> i64 {
-    env::var("ACCESS_TOKEN_TTL_MINUTES")
-        .unwrap_or_else(|_| "15".to_string())
-        .parse()
-        .expect("ACCESS_TOKEN_TTL_MINUTES must be a valid integer")
-}
-
-pub fn refresh_token_ttl_days() -> i64 {
-    env::var("REFRESH_TOKEN_TTL_DAYS")
-        .unwrap_or_else(|_| "30".to_string())
-        .parse()
-        .expect("REFRESH_TOKEN_TTL_DAYS must be a valid integer")
-}
-
 fn now_timestamp() -> i64 {
     Utc::now().timestamp()
 }
@@ -57,19 +40,27 @@ fn expiration_timestamp(duration: Duration) -> i64 {
     (Utc::now() + duration).timestamp()
 }
 
-pub fn create_access_token(user_id: i32) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn create_access_token(
+    user_id: i32,
+    config: &JwtConfig,
+) -> Result<String, jsonwebtoken::errors::Error> {
     create_token(
         user_id,
         TokenType::Access,
-        Duration::minutes(access_token_ttl_minutes()),
+        Duration::minutes(config.access_token_ttl_minutes),
+        &config.secret,
     )
 }
 
-pub fn create_refresh_token(user_id: i32) -> Result<String, jsonwebtoken::errors::Error> {
+pub fn create_refresh_token(
+    user_id: i32,
+    config: &JwtConfig,
+) -> Result<String, jsonwebtoken::errors::Error> {
     create_token(
         user_id,
         TokenType::Refresh,
-        Duration::days(refresh_token_ttl_days()),
+        Duration::days(config.refresh_token_ttl_days),
+        &config.secret,
     )
 }
 
@@ -77,6 +68,7 @@ fn create_token(
     user_id: i32,
     token_type: TokenType,
     ttl: Duration,
+    secret: &str,
 ) -> Result<String, jsonwebtoken::errors::Error> {
     let claims = Claims {
         sub: user_id,
@@ -88,14 +80,18 @@ fn create_token(
     jsonwebtoken::encode(
         &Header::default(),
         &claims,
-        &EncodingKey::from_secret(jwt_secret().as_bytes()),
+        &EncodingKey::from_secret(secret.as_bytes()),
     )
 }
 
-pub fn verify_token(token: &str, expected_token_type: TokenType) -> Result<Claims, JwtError> {
+pub fn verify_token(
+    token: &str,
+    expected_token_type: TokenType,
+    config: &JwtConfig,
+) -> Result<Claims, JwtError> {
     let token_data = jsonwebtoken::decode::<Claims>(
         token,
-        &DecodingKey::from_secret(jwt_secret().as_bytes()),
+        &DecodingKey::from_secret(config.secret.as_bytes()),
         &Validation::default(),
     )
     .map_err(|err| match err.kind() {

@@ -13,10 +13,7 @@ use crate::dto::{
     LogoutResponse, RefreshTokenRequest, TokenPairResponse, UserCreatedResponse,
 };
 use crate::handlers::{ApiError, ApiErrorCode};
-use crate::jwt::{
-    TokenType, create_access_token, create_refresh_token, hash_token, refresh_token_ttl_days,
-    verify_token,
-};
+use crate::jwt::{TokenType, create_access_token, create_refresh_token, hash_token, verify_token};
 use crate::models::{NewUser, User};
 use crate::schema::users::dsl::*;
 
@@ -189,7 +186,7 @@ pub async fn login_user(
                 .build()
         })?;
 
-    let access_token = create_access_token(user.id).map_err(|e| {
+    let access_token = create_access_token(user.id, &state.config.jwt).map_err(|e| {
         ApiError::builder()
             .http_status(StatusCode::INTERNAL_SERVER_ERROR)
             .code(ApiErrorCode::JwtCreationError)
@@ -198,7 +195,7 @@ pub async fn login_user(
             .build()
     })?;
 
-    let refresh_token = create_refresh_token(user.id).map_err(|e| {
+    let refresh_token = create_refresh_token(user.id, &state.config.jwt).map_err(|e| {
         ApiError::builder()
             .http_status(StatusCode::INTERNAL_SERVER_ERROR)
             .code(ApiErrorCode::JwtCreationError)
@@ -209,8 +206,8 @@ pub async fn login_user(
 
     let refresh_token_hash = hash_token(&refresh_token);
 
-    let refresh_expires_at =
-        chrono::Utc::now().naive_utc() + chrono::Duration::days(refresh_token_ttl_days());
+    let refresh_expires_at = chrono::Utc::now().naive_utc()
+        + chrono::Duration::days(state.config.jwt.refresh_token_ttl_days);
 
     diesel::insert_into(crate::schema::refresh_tokens::table)
         .values(&crate::models::NewRefreshToken {
@@ -243,7 +240,7 @@ pub async fn get_current_user(
 ) -> Result<impl IntoResponse, ApiError> {
     let token = extract_bearer_token(&headers)?;
 
-    let claims = verify_token(token, TokenType::Access).map_err(|_| {
+    let claims = verify_token(token, TokenType::Access, &state.config.jwt).map_err(|_| {
         ApiError::builder()
             .http_status(StatusCode::UNAUTHORIZED)
             .code(ApiErrorCode::InvalidToken)
@@ -281,7 +278,12 @@ pub async fn refresh_token(
     State(state): State<AppState>,
     Json(payload): Json<RefreshTokenRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let claims = verify_token(&payload.refresh_token, TokenType::Refresh).map_err(|_| {
+    let claims = verify_token(
+        &payload.refresh_token,
+        TokenType::Refresh,
+        &state.config.jwt,
+    )
+    .map_err(|_| {
         ApiError::builder()
             .http_status(StatusCode::UNAUTHORIZED)
             .code(ApiErrorCode::InvalidToken)
@@ -334,7 +336,7 @@ pub async fn refresh_token(
             )
         })?;
 
-    let access_token = create_access_token(claims.sub).map_err(|e| {
+    let access_token = create_access_token(claims.sub, &state.config.jwt).map_err(|e| {
         ApiError::builder()
             .http_status(StatusCode::INTERNAL_SERVER_ERROR)
             .code(ApiErrorCode::JwtCreationError)
@@ -343,7 +345,7 @@ pub async fn refresh_token(
             .build()
     })?;
 
-    let refresh_token = create_refresh_token(claims.sub).map_err(|e| {
+    let refresh_token = create_refresh_token(claims.sub, &state.config.jwt).map_err(|e| {
         ApiError::builder()
             .http_status(StatusCode::INTERNAL_SERVER_ERROR)
             .code(ApiErrorCode::JwtCreationError)
@@ -353,8 +355,8 @@ pub async fn refresh_token(
     })?;
 
     let refresh_token_hash = hash_token(&refresh_token);
-    let refresh_expires_at =
-        chrono::Utc::now().naive_utc() + chrono::Duration::days(refresh_token_ttl_days());
+    let refresh_expires_at = chrono::Utc::now().naive_utc()
+        + chrono::Duration::days(state.config.jwt.refresh_token_ttl_days);
 
     diesel::insert_into(crate::schema::refresh_tokens::table)
         .values(&crate::models::NewRefreshToken {

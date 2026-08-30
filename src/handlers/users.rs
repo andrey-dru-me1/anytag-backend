@@ -149,26 +149,27 @@ pub async fn login_user(
     State(state): State<AppState>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<impl IntoResponse, ApiError> {
-    let mut conn = state.db_pool.get().await?;
-
     let err_builder = ApiError::builder()
         .http_status(StatusCode::UNAUTHORIZED)
         .code(ApiErrorCode::InvalidCredentials)
         .message("Invalid email or password");
 
-    let user: User = users
-        .filter(email.eq(&payload.email))
-        .first::<User>(&mut conn)
-        .await
-        .map_err(|e| {
-            err_builder
-                .clone()
-                .context(format!(
-                    "failed to find user by email '{}' in database: {}",
-                    payload.email, e
-                ))
-                .build()
-        })?;
+    let user: User = {
+        let mut conn = state.db_pool.get().await?;
+        users
+            .filter(email.eq(&payload.email))
+            .first::<User>(&mut conn)
+            .await
+            .map_err(|e| {
+                err_builder
+                    .clone()
+                    .context(format!(
+                        "failed to find user by email '{}' in database: {}",
+                        payload.email, e
+                    ))
+                    .build()
+            })?
+    };
 
     let parsed_hash = PasswordHash::new(&user.password_hash).map_err(|e| {
         err_builder
@@ -209,6 +210,7 @@ pub async fn login_user(
     let refresh_expires_at = chrono::Utc::now().naive_utc()
         + chrono::Duration::days(state.config.jwt.refresh_token_ttl_days);
 
+    let mut conn = state.db_pool.get().await?;
     diesel::insert_into(crate::schema::refresh_tokens::table)
         .values(&crate::models::NewRefreshToken {
             user_id: user.id,

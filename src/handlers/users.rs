@@ -163,10 +163,7 @@ pub async fn login_user(
             .map_err(|e| {
                 err_builder
                     .clone()
-                    .context(format!(
-                        "failed to find user by email '{}' in database: {}",
-                        payload.email, e
-                    ))
+                    .context(format!("failed to find user by email in database: {e}"))
                     .build()
             })?
     };

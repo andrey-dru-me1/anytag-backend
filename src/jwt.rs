@@ -7,6 +7,7 @@ use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};
 
 use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, errors::ErrorKind};
+use uuid::Uuid;
 
 use crate::config::JwtConfig;
 
@@ -22,6 +23,7 @@ pub struct Claims {
     pub sub: i32,
     pub exp: i64,
     pub iat: i64,
+    pub jti: String,
     pub token_type: TokenType,
 }
 
@@ -74,6 +76,7 @@ fn create_token(
         sub: user_id,
         iat: now_timestamp(),
         exp: expiration_timestamp(ttl),
+        jti: Uuid::new_v4().to_string(),
         token_type,
     };
 
@@ -158,6 +161,24 @@ mod tests {
         assert_eq!(claims.sub, 7);
         assert_eq!(claims.token_type, TokenType::Refresh);
         assert!(claims.exp > claims.iat);
+    }
+
+    #[test]
+    fn test_create_refresh_token_produces_unique_tokens() {
+        let config = jwt_config("test-unique-refresh-secret");
+
+        let first =
+            create_refresh_token(7, &config).expect("first refresh token creation should succeed");
+        let second =
+            create_refresh_token(7, &config).expect("second refresh token creation should succeed");
+
+        assert_ne!(first, second);
+
+        let first_claims = verify_token(&first, TokenType::Refresh, &config)
+            .expect("first refresh token verification should succeed");
+        let second_claims = verify_token(&second, TokenType::Refresh, &config)
+            .expect("second refresh token verification should succeed");
+        assert_ne!(first_claims.jti, second_claims.jti);
     }
 
     #[test]

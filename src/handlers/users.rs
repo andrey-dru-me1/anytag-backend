@@ -22,6 +22,9 @@ use argon2::{
     password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
 };
 
+const DUMMY_PASSWORD_HASH: &str =
+    "$argon2id$v=19$m=19456,t=2,p=1$c29tZXNhbHQ$CTFhFdXPJO1aFaMaO6Mm5c8y7cJHAph8ArZWb2GRPPc";
+
 fn hash_password(password: &str) -> Result<String, String> {
     let argon2 = Argon2::default();
 
@@ -29,6 +32,22 @@ fn hash_password(password: &str) -> Result<String, String> {
         .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|e| format!("argon2 password hashing failed: {}", e))
+}
+
+fn verify_password(password: &str, stored_password_hash: &str) -> Result<(), String> {
+    let parsed_hash = PasswordHash::new(stored_password_hash)
+        .map_err(|e| format!("password hash parsing failed: {e}"))?;
+
+    Argon2::default()
+        .verify_password(password.as_bytes(), &parsed_hash)
+        .map_err(|e| format!("argon2 password verification failed: {e}"))
+}
+
+fn password_task_error(operation: &str, error: tokio::task::JoinError) -> ApiError {
+    ApiError::builder()
+        .code(ApiErrorCode::PasswordHashError)
+        .context(format!("password {operation} task failed: {error}"))
+        .build()
 }
 
 /// Validate email format.
@@ -116,10 +135,10 @@ pub async fn create_user(
     validate_email(&payload.email)?;
     validate_password_strength(&payload.password, &payload.name, &payload.email)?;
 
-    let mut conn = state.db_pool.get().await?;
-
-    let password_hashed =
-        hash_password(&payload.password).map_err(|e| (ApiErrorCode::PasswordHashError, e))?;
+    let password_hashed = tokio::task::spawn_blocking(move || hash_password(&payload.password))
+        .await
+        .map_err(|e| password_task_error("hashing", e))?
+        .map_err(|e| (ApiErrorCode::PasswordHashError, e))?;
 
     let new_user = NewUser {
         name: payload.name,
@@ -127,6 +146,7 @@ pub async fn create_user(
         password_hash: password_hashed,
     };
 
+    let mut conn = state.db_pool.get().await?;
     let created = diesel::insert_into(users)
         .values(&new_user)
         .get_result::<crate::models::User>(&mut conn)
@@ -154,12 +174,13 @@ pub async fn login_user(
         .code(ApiErrorCode::InvalidCredentials)
         .message("Invalid email or password");
 
-    let user: User = {
+    let user: Option<User> = {
         let mut conn = state.db_pool.get().await?;
         users
             .filter(email.eq(&payload.email))
             .first::<User>(&mut conn)
             .await
+            .optional()
             .map_err(|e| {
                 err_builder
                     .clone()
@@ -168,21 +189,19 @@ pub async fn login_user(
             })?
     };
 
-    let parsed_hash = PasswordHash::new(&user.password_hash).map_err(|e| {
-        err_builder
-            .clone()
-            .context(format!("password hash parsing failed: {}", e))
-            .build()
-    })?;
+    let stored_password_hash = user
+        .as_ref()
+        .map(|user| user.password_hash.clone())
+        .unwrap_or_else(|| DUMMY_PASSWORD_HASH.to_string());
+    let password_matches = tokio::task::spawn_blocking(move || {
+        verify_password(&payload.password, &stored_password_hash).is_ok()
+    })
+    .await
+    .map_err(|e| password_task_error("verification", e))?;
 
-    Argon2::default()
-        .verify_password(payload.password.as_bytes(), &parsed_hash)
-        .map_err(|e| {
-            err_builder
-                .clone()
-                .context(format!("argon2 password verification failed: {}", e))
-                .build()
-        })?;
+    let Some(user) = user.filter(|_| password_matches) else {
+        return Err(err_builder.context("password verification failed").build());
+    };
 
     let access_token = create_access_token(user.id, &state.config.jwt).map_err(|e| {
         ApiError::builder()
@@ -459,6 +478,25 @@ mod tests {
     fn test_hash_password_unicode() {
         let hash = hash_password("пароль你好🔒").expect("unicode password should hash");
         assert!(hash.starts_with("$argon2"));
+    }
+
+    // -----------------------------------------------------------------------
+    // verify_password
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_verify_password_accepts_correct_password() {
+        let password = "CorrectHorseBatteryStaple99!";
+        let hash = hash_password(password).expect("hashing should succeed");
+
+        assert!(verify_password(password, &hash).is_ok());
+    }
+
+    #[test]
+    fn test_verify_password_rejects_wrong_password() {
+        let hash = hash_password("CorrectHorseBatteryStaple99!").expect("hashing should succeed");
+
+        assert!(verify_password("WrongPassword123!", &hash).is_err());
     }
 
     // -----------------------------------------------------------------------

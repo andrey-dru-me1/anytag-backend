@@ -24,8 +24,7 @@ fn json_get(uri: &str) -> anyhow::Result<axum::http::Request<Body>> {
 }
 
 fn json_post(uri: &str, body: Value) -> anyhow::Result<Request<Body>> {
-    let json_body =
-        serde_json::to_string(&body).context("Failed to serialize request body")?;
+    let json_body = serde_json::to_string(&body).context("Failed to serialize request body")?;
 
     Request::builder()
         .method("POST")
@@ -238,10 +237,7 @@ async fn test_list_owned_posts_returns_only_current_user_posts() -> anyhow::Resu
     // Request only the current user's posts.
     let response = test_app
         .router()
-        .oneshot(bearer_get(
-            "/api/v1/users/me/posts",
-            &access_token,
-        )?)
+        .oneshot(bearer_get("/api/v1/users/me/posts", &access_token)?)
         .await?;
 
     assert_eq!(response.status(), StatusCode::OK);

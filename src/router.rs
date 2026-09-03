@@ -17,6 +17,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/", get(health::health_check))
         .route("/health", get(health::health_check))
         .route("/posts", get(posts::list_posts))
+        .route("/users/me/posts", get(posts::list_owned_posts))
         .route("/tags", get(tags::list_tags))
         .route("/users", post(users::create_user))
         .route("/auth/login", post(auth::login_user))

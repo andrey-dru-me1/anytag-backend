@@ -10,12 +10,14 @@ pub type UserImageId = Id;
 
 mod image;
 mod post;
+mod refresh_token;
 mod relations;
 mod tag;
 mod user;
 
 pub use image::*;
 pub use post::*;
+pub use refresh_token::*;
 pub use tag::*;
 pub use user::*;
 

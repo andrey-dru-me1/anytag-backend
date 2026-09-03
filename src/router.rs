@@ -19,7 +19,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/posts", get(posts::list_posts))
         .route("/tags", get(tags::list_tags))
         .route("/users", post(users::create_user))
-        .route("/auth/login", post(users::login_user))
+        .route("/auth/login", post(auth::login_user))
+        .route("/users/me", get(auth::get_current_user))
+        .route("/auth/refresh", post(auth::refresh_token))
+        .route("/auth/logout", post(auth::logout_user))
         .route("/media/images", post(images::upload_image))
         .route("/media/images/{image_name}", get(images::get_image))
         .layer(DefaultBodyLimit::max(max_size));

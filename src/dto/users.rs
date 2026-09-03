@@ -29,4 +29,36 @@ pub struct LoginResponse {
     pub message: String,
     pub user_id: UserId,
     pub email: String,
+    pub access_token: String,
+    pub refresh_token: String,
+    pub token_type: String,
+}
+
+#[derive(Serialize)]
+pub struct CurrentUserResponse {
+    pub id: UserId,
+    pub name: String,
+    pub email: String,
+}
+
+#[derive(Deserialize)]
+pub struct RefreshTokenRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Serialize)]
+pub struct TokenPairResponse {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub token_type: String,
+}
+
+#[derive(Deserialize)]
+pub struct LogoutRequest {
+    pub refresh_token: String,
+}
+
+#[derive(Serialize)]
+pub struct LogoutResponse {
+    pub message: String,
 }

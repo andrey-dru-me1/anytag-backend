@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 The Anytag Backend Authors
 
+pub mod auth;
 pub mod health;
 pub mod images;
 pub mod posts;
@@ -28,6 +29,8 @@ pub enum ApiErrorCode {
     S3StorageError,
     ImageNotFound,
     ImageTooLarge,
+    JwtCreationError,
+    InvalidToken,
 }
 
 #[derive(bon::Builder, Debug)]

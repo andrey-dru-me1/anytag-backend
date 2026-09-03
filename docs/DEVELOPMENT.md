@@ -62,6 +62,16 @@ brew install mise just rustup-init
 rustup reads [`rust-toolchain.toml`](../rust-toolchain.toml) automatically the first
 time you run `cargo`/`rustc` in the project, so no manual `rustup override` is needed.
 
+### Prerequisites
+
+Before running `mise install`, make sure either `uv` or `pipx` is installed:
+
+- `uv` (recommended by mise), or
+- `pipx`
+
+The `pipx:reuse` tool defined in `mise.toml` requires one of these tools to be
+available on the host.
+
 mise reads [`mise.toml`](../mise.toml), which installs `diesel-cli` (via cargo) and
 `reuse` (via pipx) and exports the environment. Prepare it with:
 

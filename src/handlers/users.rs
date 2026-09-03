@@ -2,21 +2,17 @@
 // Copyright (C) 2026 The Anytag Backend Authors
 
 use axum::{Json, extract::State, http::StatusCode, response::IntoResponse};
-use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use email_address::EmailAddress;
 use zxcvbn::{Score, zxcvbn};
 
 use crate::config::AppState;
-use crate::dto::{CreateUserRequest, LoginRequest, LoginResponse, UserCreatedResponse};
+use crate::dto::{CreateUserRequest, UserCreatedResponse};
 use crate::handlers::{ApiError, ApiErrorCode};
-use crate::models::{NewUser, User};
+use crate::models::NewUser;
 use crate::schema::users::dsl::*;
 
-use argon2::{
-    Argon2,
-    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash},
-};
+use argon2::{Argon2, password_hash::PasswordHasher};
 
 fn hash_password(password: &str) -> Result<String, String> {
     let argon2 = Argon2::default();
@@ -25,6 +21,13 @@ fn hash_password(password: &str) -> Result<String, String> {
         .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|e| format!("argon2 password hashing failed: {}", e))
+}
+
+fn password_task_error(operation: &str, error: tokio::task::JoinError) -> ApiError {
+    ApiError::builder()
+        .code(ApiErrorCode::PasswordHashError)
+        .context(format!("password {operation} task failed: {error}"))
+        .build()
 }
 
 /// Validate email format.
@@ -40,6 +43,7 @@ fn validate_email(input: &str) -> Result<(), ApiError> {
             .message("Invalid email")
             .build());
     }
+
     Ok(())
 }
 
@@ -80,10 +84,10 @@ pub async fn create_user(
     validate_email(&payload.email)?;
     validate_password_strength(&payload.password, &payload.name, &payload.email)?;
 
-    let mut conn = state.db_pool.get().await?;
-
-    let password_hashed =
-        hash_password(&payload.password).map_err(|e| (ApiErrorCode::PasswordHashError, e))?;
+    let password_hashed = tokio::task::spawn_blocking(move || hash_password(&payload.password))
+        .await
+        .map_err(|e| password_task_error("hashing", e))?
+        .map_err(|e| (ApiErrorCode::PasswordHashError, e))?;
 
     let new_user = NewUser {
         name: payload.name,
@@ -91,6 +95,7 @@ pub async fn create_user(
         password_hash: password_hashed,
     };
 
+    let mut conn = state.db_pool.get().await?;
     let created = diesel::insert_into(users)
         .values(&new_user)
         .get_result::<crate::models::User>(&mut conn)
@@ -106,56 +111,6 @@ pub async fn create_user(
         message: "user created".to_string(),
         name: created.name,
         email: created.email,
-    }))
-}
-
-pub async fn login_user(
-    State(state): State<AppState>,
-    Json(payload): Json<LoginRequest>,
-) -> Result<impl IntoResponse, ApiError> {
-    let mut conn = state.db_pool.get().await?;
-
-    let err_builder = ApiError::builder()
-        .http_status(StatusCode::UNAUTHORIZED)
-        .code(ApiErrorCode::InvalidCredentials)
-        .message("Invalid email or password");
-
-    let user: User = users
-        .filter(email.eq(&payload.email))
-        .first::<User>(&mut conn)
-        .await
-        .map_err(|e| {
-            err_builder
-                .clone()
-                .context(format!(
-                    "failed to find user by email '{}' in database: {}",
-                    payload.email, e
-                ))
-                .build()
-        })?;
-
-    let parsed_hash = PasswordHash::new(&user.password_hash).map_err(|e| {
-        err_builder
-            .clone()
-            .context(format!("password hash parsing failed: {}", e))
-            .build()
-    })?;
-
-    let argon2 = Argon2::default();
-
-    argon2
-        .verify_password(payload.password.as_bytes(), &parsed_hash)
-        .map_err(|e| {
-            err_builder
-                .clone()
-                .context(format!("argon2 password verification failed: {}", e))
-                .build()
-        })?;
-
-    Ok(Json(LoginResponse {
-        message: "login successful".to_string(),
-        user_id: user.id,
-        email: user.email,
     }))
 }
 

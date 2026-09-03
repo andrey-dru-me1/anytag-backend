@@ -3,8 +3,12 @@
 
 use axum::{
     extract::State,
+    http::HeaderMap,
     response::{IntoResponse, Json},
 };
+
+use super::auth::get_current_user_id;
+
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 
@@ -31,6 +35,34 @@ pub async fn list_tags(State(state): State<AppState>) -> Result<impl IntoRespons
         })?;
 
     let tag_responses: Vec<TagResponse> = all_tags.into_iter().map(Into::into).collect();
+
+    Ok(Json(TagsResponse {
+        tags: tag_responses,
+    }))
+}
+
+pub async fn list_owned_tags(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse, ApiError> {
+    use crate::schema::tags::dsl::*;
+
+    let current_user_id = get_current_user_id(&headers, &state)?;
+    let mut conn = state.db_pool.get().await?;
+
+    let owned_tags = tags
+        .filter(user_id.eq(current_user_id))
+        .order(created_at.desc())
+        .load::<Tag>(&mut conn)
+        .await
+        .map_err(|e| {
+            (
+                ApiErrorCode::DbQueryError,
+                format!("Failed to load owned tags: {e}"),
+            )
+        })?;
+
+    let tag_responses: Vec<TagResponse> = owned_tags.into_iter().map(Into::into).collect();
 
     Ok(Json(TagsResponse {
         tags: tag_responses,

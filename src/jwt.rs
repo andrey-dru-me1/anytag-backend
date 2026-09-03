@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use chrono::{Duration, Utc};
 use sha2::{Digest, Sha256};
 
-use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, errors::ErrorKind};
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation};
 use uuid::Uuid;
 
 use crate::config::JwtConfig;
@@ -27,11 +27,36 @@ pub struct Claims {
     pub token_type: TokenType,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum JwtError {
-    InvalidToken,
-    ExpiredToken,
-    WrongTokenType,
+    JsonWebToken(jsonwebtoken::errors::Error),
+    WrongTokenType {
+        expected: TokenType,
+        actual: TokenType,
+    },
+}
+
+impl std::fmt::Display for JwtError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::JsonWebToken(error) => error.fmt(f),
+            Self::WrongTokenType { expected, actual } => {
+                write!(
+                    f,
+                    "unexpected JWT token type: expected {expected:?}, got {actual:?}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for JwtError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::JsonWebToken(error) => Some(error),
+            Self::WrongTokenType { .. } => None,
+        }
+    }
 }
 
 fn now_timestamp() -> i64 {
@@ -97,13 +122,13 @@ pub fn verify_token(
         &DecodingKey::from_secret(config.secret.as_bytes()),
         &Validation::default(),
     )
-    .map_err(|err| match err.kind() {
-        ErrorKind::ExpiredSignature => JwtError::ExpiredToken,
-        _ => JwtError::InvalidToken,
-    })?;
+    .map_err(JwtError::JsonWebToken)?;
 
     if token_data.claims.token_type != expected_token_type {
-        return Err(JwtError::WrongTokenType);
+        return Err(JwtError::WrongTokenType {
+            expected: expected_token_type,
+            actual: token_data.claims.token_type,
+        });
     }
 
     Ok(token_data.claims)
@@ -123,6 +148,7 @@ pub fn hash_token(token: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use jsonwebtoken::errors::ErrorKind;
 
     fn jwt_config(secret: &str) -> JwtConfig {
         JwtConfig {
@@ -189,7 +215,13 @@ mod tests {
 
         let result = verify_token(&token, TokenType::Access, &config);
 
-        assert_eq!(result.unwrap_err(), JwtError::WrongTokenType);
+        assert!(matches!(
+            result,
+            Err(JwtError::WrongTokenType {
+                expected: TokenType::Access,
+                actual: TokenType::Refresh,
+            })
+        ));
     }
 
     #[test]
@@ -201,7 +233,11 @@ mod tests {
 
         let result = verify_token(&token, TokenType::Access, &verification_config);
 
-        assert_eq!(result.unwrap_err(), JwtError::InvalidToken);
+        assert!(matches!(
+            result,
+            Err(JwtError::JsonWebToken(error))
+                if matches!(error.kind(), ErrorKind::InvalidSignature)
+        ));
     }
 
     #[test]
@@ -212,7 +248,11 @@ mod tests {
 
         let result = verify_token(&token, TokenType::Access, &config);
 
-        assert_eq!(result.unwrap_err(), JwtError::ExpiredToken);
+        assert!(matches!(
+            result,
+            Err(JwtError::JsonWebToken(error))
+                if matches!(error.kind(), ErrorKind::ExpiredSignature)
+        ));
     }
 
     // -----------------------------------------------------------------------

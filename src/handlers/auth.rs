@@ -161,11 +161,11 @@ pub async fn get_current_user(
 ) -> Result<impl IntoResponse, ApiError> {
     let token = extract_bearer_token(&headers)?;
 
-    let claims = verify_token(token, TokenType::Access, &state.config.jwt).map_err(|_| {
+    let claims = verify_token(token, TokenType::Access, &state.config.jwt).map_err(|error| {
         ApiError::builder()
             .http_status(StatusCode::UNAUTHORIZED)
             .code(ApiErrorCode::InvalidToken)
-            .context("access token verification failed")
+            .context(format!("access token verification failed: {error}"))
             .message("Authentication failed")
             .build()
     })?;
@@ -203,11 +203,11 @@ pub async fn refresh_token(
         TokenType::Refresh,
         &state.config.jwt,
     )
-    .map_err(|_| {
+    .map_err(|error| {
         ApiError::builder()
             .http_status(StatusCode::UNAUTHORIZED)
             .code(ApiErrorCode::InvalidToken)
-            .context("refresh token verification failed")
+            .context(format!("refresh token verification failed: {error}"))
             .message("Authentication failed")
             .build()
     })?;

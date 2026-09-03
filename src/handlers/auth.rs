@@ -16,7 +16,7 @@ use crate::dto::{
 };
 use crate::handlers::{ApiError, ApiErrorCode};
 use crate::jwt::{TokenType, create_access_token, create_refresh_token, hash_token, verify_token};
-use crate::models::User;
+use crate::models::{User, UserId};
 use crate::schema::users::dsl::*;
 
 const DUMMY_PASSWORD_HASH: &str =
@@ -67,6 +67,24 @@ fn extract_bearer_token(headers: &HeaderMap) -> Result<&str, ApiError> {
             .message("Invalid authorization token")
             .build()
     })
+}
+
+pub(super) fn get_current_user_id(
+    headers: &HeaderMap,
+    state: &AppState,
+) -> Result<UserId, ApiError> {
+    let token = extract_bearer_token(headers)?;
+
+    let claims = verify_token(token, TokenType::Access, &state.config.jwt).map_err(|err| {
+        ApiError::builder()
+            .http_status(StatusCode::UNAUTHORIZED)
+            .code(ApiErrorCode::InvalidToken)
+            .context(format!("access token verification failed: {err:?}"))
+            .message("Authentication failed")
+            .build()
+    })?;
+
+    Ok(claims.sub)
 }
 
 pub async fn login_user(
@@ -159,20 +177,11 @@ pub async fn get_current_user(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<impl IntoResponse, ApiError> {
-    let token = extract_bearer_token(&headers)?;
-
-    let claims = verify_token(token, TokenType::Access, &state.config.jwt).map_err(|_| {
-        ApiError::builder()
-            .http_status(StatusCode::UNAUTHORIZED)
-            .code(ApiErrorCode::InvalidToken)
-            .context("access token verification failed")
-            .message("Authentication failed")
-            .build()
-    })?;
+    let current_user_id = get_current_user_id(&headers, &state)?;
 
     let mut conn = state.db_pool.get().await?;
     let user = users
-        .find(claims.sub)
+        .find(current_user_id)
         .first::<User>(&mut conn)
         .await
         .map_err(|e| {
@@ -181,7 +190,7 @@ pub async fn get_current_user(
                 .code(ApiErrorCode::InvalidToken)
                 .context(format!(
                     "failed to find user from token subject '{}': {e}",
-                    claims.sub
+                    current_user_id
                 ))
                 .message("Authentication failed")
                 .build()

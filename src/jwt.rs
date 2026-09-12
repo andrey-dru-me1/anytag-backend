@@ -59,14 +59,6 @@ impl std::error::Error for JwtError {
     }
 }
 
-fn now_timestamp() -> i64 {
-    Utc::now().timestamp()
-}
-
-fn expiration_timestamp(duration: Duration) -> i64 {
-    (Utc::now() + duration).timestamp()
-}
-
 pub fn create_access_token(
     user_id: i32,
     config: &JwtConfig,
@@ -97,10 +89,11 @@ fn create_token(
     ttl: Duration,
     secret: &str,
 ) -> Result<String, jsonwebtoken::errors::Error> {
+    let now = Utc::now();
     let claims = Claims {
         sub: user_id,
-        iat: now_timestamp(),
-        exp: expiration_timestamp(ttl),
+        iat: now.timestamp(),
+        exp: (now + ttl).timestamp(),
         jti: Uuid::new_v4().to_string(),
         token_type,
     };

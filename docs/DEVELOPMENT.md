@@ -255,6 +255,18 @@ The application stores media files in an S3-compatible object store (SeaweedFS l
 
 See [MEDIA.md](./MEDIA.md) for the full media storage architecture.
 
+### CORS (in `.env` file)
+
+The backend allows requests from the Flutter Web development origin configured by `CORS_ORIGIN`.
+
+```env
+CORS_ORIGIN=http://127.0.0.1:18081
+```
+
+If `CORS_ORIGIN` is not set, the backend uses `http://127.0.0.1:18081` by default.
+
+The value must contain the complete origin, including the scheme, host, and port.
+
 ### Constructed Variables
 
 - `DATABASE_URL` - Automatically constructed by [`.env`](../.env.example)-powered

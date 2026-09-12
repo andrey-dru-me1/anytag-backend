@@ -103,8 +103,16 @@ pub async fn login_user(
     .await
     .map_err(password_task_error)?;
 
-    let Some(user) = user.filter(|_| password_matches) else {
-        return Err(err_builder.context("password verification failed").build());
+    let user = match (user, password_matches) {
+        (Some(user), true) => user,
+        (None, _) => {
+            return Err(err_builder
+                .context("user with specified email not found in database")
+                .build());
+        }
+        _ => {
+            return Err(err_builder.context("password verification failed").build());
+        }
     };
 
     let access_token = create_access_token(user.id, &state.config.jwt).map_err(|e| {

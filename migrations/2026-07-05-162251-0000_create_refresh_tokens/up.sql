@@ -2,7 +2,7 @@
 -- SPDX-License-Identifier: AGPL-3.0-only
 
 CREATE TABLE refresh_tokens (
-    id SERIAL PRIMARY KEY,
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     token_hash TEXT NOT NULL UNIQUE,
     expires_at TIMESTAMP NOT NULL,

@@ -121,8 +121,16 @@ pub async fn login_user(
     .await
     .map_err(password_task_error)?;
 
-    let Some(user) = user.filter(|_| password_matches) else {
-        return Err(err_builder.context("password verification failed").build());
+    let user = match (user, password_matches) {
+        (Some(user), true) => user,
+        (None, _) => {
+            return Err(err_builder
+                .context("user with specified email not found in database")
+                .build());
+        }
+        _ => {
+            return Err(err_builder.context("password verification failed").build());
+        }
     };
 
     let access_token = create_access_token(user.id, &state.config.jwt).map_err(|e| {
@@ -212,11 +220,11 @@ pub async fn refresh_token(
         TokenType::Refresh,
         &state.config.jwt,
     )
-    .map_err(|_| {
+    .map_err(|error| {
         ApiError::builder()
             .http_status(StatusCode::UNAUTHORIZED)
             .code(ApiErrorCode::InvalidToken)
-            .context("refresh token verification failed")
+            .context(format!("refresh token verification failed: {error}"))
             .message("Authentication failed")
             .build()
     })?;
@@ -245,8 +253,8 @@ pub async fn refresh_token(
     })?;
 
     let new_refresh_token_hash = hash_token(&refresh_token);
-    let refresh_expires_at = chrono::Utc::now().naive_utc()
-        + chrono::Duration::days(state.config.jwt.refresh_token_ttl_days);
+    let now = chrono::Utc::now().naive_utc();
+    let refresh_expires_at = now + chrono::Duration::days(state.config.jwt.refresh_token_ttl_days);
     let new_refresh_token = crate::models::NewRefreshToken {
         user_id: claims.sub,
         token_hash: new_refresh_token_hash,
@@ -282,7 +290,7 @@ pub async fn refresh_token(
                     .context("refresh token is revoked")
                     .build());
             }
-            if stored_token.expires_at < chrono::Utc::now().naive_utc() {
+            if stored_token.expires_at < now {
                 return Err(err_builder
                     .clone()
                     .context("refresh token is expired in database")
@@ -290,7 +298,7 @@ pub async fn refresh_token(
             }
 
             diesel::update(crate::schema::refresh_tokens::table.find(stored_token.id))
-                .set(crate::schema::refresh_tokens::revoked_at.eq(chrono::Utc::now().naive_utc()))
+                .set(crate::schema::refresh_tokens::revoked_at.eq(now))
                 .execute(conn)
                 .await
                 .map_err(|e| {

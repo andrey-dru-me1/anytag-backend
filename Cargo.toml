@@ -32,6 +32,7 @@ hex = "0.4.3"
 image = { version = "0.25.10", default-features = false, features = ["webp", "jpeg", "png"] }
 tokio-util = { version = "0.7.19", features = ["io"] }
 uuid = { version = "1.25.0", features = ["v4"] }
+jsonwebtoken = { version = "10.4.0", features = ["rust_crypto"] }
 
 [dev-dependencies]
 http-body-util = "0.1"

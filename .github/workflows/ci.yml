@@ -15,6 +15,10 @@ env:
 
   BASE_URL: http://localhost:3000
 
+  JWT_SECRET: anytag_ci_test_secret_do_not_use_in_production
+  ACCESS_TOKEN_TTL_MINUTES: 15
+  REFRESH_TOKEN_TTL_DAYS: 30
+
   DB_TYPE: postgres
   DB_HOST: localhost
   DB_PORT: 5432

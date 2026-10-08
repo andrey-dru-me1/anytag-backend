@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Copyright (C) 2026 The Anytag Backend Authors
 
-use std::env;
+use std::{env, fmt};
 
 use anyhow::Context;
 use aws_config::meta::region::RegionProviderChain;
@@ -16,6 +16,60 @@ use diesel_async::{
 };
 
 pub type DbPool = Pool<AsyncPgConnection>;
+
+#[derive(Clone)]
+pub struct JwtConfig {
+    pub secret: String,
+    pub access_token_ttl_minutes: i64,
+    pub refresh_token_ttl_days: i64,
+}
+
+impl JwtConfig {
+    pub fn from_env() -> anyhow::Result<Self> {
+        Self {
+            secret: load_env("JWT_SECRET")?,
+            access_token_ttl_minutes: load_i64_env_or_default("ACCESS_TOKEN_TTL_MINUTES", 15)?,
+            refresh_token_ttl_days: load_i64_env_or_default("REFRESH_TOKEN_TTL_DAYS", 30)?,
+        }
+        .validate()
+    }
+
+    fn validate(self) -> anyhow::Result<Self> {
+        anyhow::ensure!(
+            self.secret.len() >= 32,
+            "JWT_SECRET must be at least 32 bytes long"
+        );
+        anyhow::ensure!(
+            self.access_token_ttl_minutes > 0,
+            "ACCESS_TOKEN_TTL_MINUTES must be greater than zero"
+        );
+        anyhow::ensure!(
+            self.refresh_token_ttl_days > 0,
+            "REFRESH_TOKEN_TTL_DAYS must be greater than zero"
+        );
+
+        let refresh_token_ttl_minutes = self
+            .refresh_token_ttl_days
+            .checked_mul(24 * 60)
+            .context("REFRESH_TOKEN_TTL_DAYS is too large")?;
+        anyhow::ensure!(
+            refresh_token_ttl_minutes > self.access_token_ttl_minutes,
+            "refresh token lifetime must be longer than access token lifetime"
+        );
+
+        Ok(self)
+    }
+}
+
+impl fmt::Debug for JwtConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("JwtConfig")
+            .field("secret", &"[REDACTED]")
+            .field("access_token_ttl_minutes", &self.access_token_ttl_minutes)
+            .field("refresh_token_ttl_days", &self.refresh_token_ttl_days)
+            .finish()
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct S3Config {
@@ -78,6 +132,7 @@ impl S3Config {
 #[derive(Clone, Debug)]
 pub struct AppConfig {
     pub s3: S3Config,
+    pub jwt: JwtConfig,
     pub database_url: String,
     pub base_url: String,
 }
@@ -86,6 +141,7 @@ impl AppConfig {
     pub fn from_env() -> anyhow::Result<AppConfig> {
         Ok(Self {
             s3: S3Config::from_env()?,
+            jwt: JwtConfig::from_env()?,
             database_url: load_env("DATABASE_URL")?,
             base_url: load_env("BASE_URL")?,
         })
@@ -130,4 +186,96 @@ impl AppState {
 
 fn load_env(var: &'static str) -> anyhow::Result<String> {
     env::var(var).context(format!("{var} must be set in .env or environment"))
+}
+
+fn load_i64_env_or_default(var: &'static str, default: i64) -> anyhow::Result<i64> {
+    env::var(var)
+        .unwrap_or_else(|_| default.to_string())
+        .parse()
+        .context(format!("{var} must be a valid integer"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn jwt_config(
+        secret: &str,
+        access_token_ttl_minutes: i64,
+        refresh_token_ttl_days: i64,
+    ) -> JwtConfig {
+        JwtConfig {
+            secret: secret.to_string(),
+            access_token_ttl_minutes,
+            refresh_token_ttl_days,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // JwtConfig::validate
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn test_jwt_config_validate_accepts_valid_config() {
+        let config = jwt_config("a-secure-test-secret-with-32-bytes", 15, 30);
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_jwt_config_validate_rejects_short_secret() {
+        let error = jwt_config("short-secret", 15, 30)
+            .validate()
+            .expect_err("short JWT secret should be rejected");
+
+        assert_eq!(
+            error.to_string(),
+            "JWT_SECRET must be at least 32 bytes long"
+        );
+    }
+
+    #[test]
+    fn test_jwt_config_validate_rejects_non_positive_access_ttl() {
+        let error = jwt_config("a-secure-test-secret-with-32-bytes", 0, 30)
+            .validate()
+            .expect_err("non-positive access token TTL should be rejected");
+
+        assert_eq!(
+            error.to_string(),
+            "ACCESS_TOKEN_TTL_MINUTES must be greater than zero"
+        );
+    }
+
+    #[test]
+    fn test_jwt_config_validate_rejects_non_positive_refresh_ttl() {
+        let error = jwt_config("a-secure-test-secret-with-32-bytes", 15, 0)
+            .validate()
+            .expect_err("non-positive refresh token TTL should be rejected");
+
+        assert_eq!(
+            error.to_string(),
+            "REFRESH_TOKEN_TTL_DAYS must be greater than zero"
+        );
+    }
+
+    #[test]
+    fn test_jwt_config_validate_rejects_refresh_ttl_not_longer_than_access_ttl() {
+        let error = jwt_config("a-secure-test-secret-with-32-bytes", 24 * 60, 1)
+            .validate()
+            .expect_err("refresh token TTL should be longer than access token TTL");
+
+        assert_eq!(
+            error.to_string(),
+            "refresh token lifetime must be longer than access token lifetime"
+        );
+    }
+
+    #[test]
+    fn test_jwt_config_validate_rejects_refresh_ttl_overflow() {
+        let error = jwt_config("a-secure-test-secret-with-32-bytes", 15, i64::MAX)
+            .validate()
+            .expect_err("overflowing refresh token TTL should be rejected");
+
+        assert_eq!(error.to_string(), "REFRESH_TOKEN_TTL_DAYS is too large");
+    }
 }

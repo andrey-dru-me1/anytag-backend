@@ -6,12 +6,27 @@ use crate::handlers::*;
 use axum::{
     Router,
     extract::DefaultBodyLimit,
+    http::{HeaderValue, Method, header},
     routing::{get, post},
 };
+
+use tower_http::cors::CorsLayer;
 
 /// Create and configure the Axum router
 pub fn create_router(state: AppState) -> Router {
     let max_size = 10 * 1024 * 1024;
+
+    let cors_origin =
+        std::env::var("CORS_ORIGIN").unwrap_or_else(|_| "http://127.0.0.1:18081".to_string());
+
+    let cors = CorsLayer::new()
+        .allow_origin(
+            cors_origin
+                .parse::<HeaderValue>()
+                .expect("CORS_ORIGIN must be a valid HTTP origin"),
+        )
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([header::CONTENT_TYPE, header::AUTHORIZATION]);
 
     let api_v1 = Router::new()
         .route("/", get(health::health_check))
@@ -27,7 +42,10 @@ pub fn create_router(state: AppState) -> Router {
         .route("/media/images/{image_name}", get(images::get_image))
         .layer(DefaultBodyLimit::max(max_size));
 
-    Router::new().nest("/api/v1", api_v1).with_state(state)
+    Router::new()
+        .nest("/api/v1", api_v1)
+        .layer(cors)
+        .with_state(state)
 }
 
 #[cfg(test)]

@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 
 [tools]
-"cargo:diesel_cli" = "2.3.12"
+"cargo:diesel_cli" = { version = "2.3.12", default-features = false, features = ["postgres"] }
 "pipx:reuse" = { version = "6.2.0", extras = ["charset-normalizer"] }
 
 [env]

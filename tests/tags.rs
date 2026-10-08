@@ -7,10 +7,10 @@ use anyhow::Context;
 use anytag_backend::models::NewTag;
 use anytag_backend::schema::tags::dsl;
 use axum::body::Body;
-use axum::http::StatusCode;
+use axum::http::{Request, StatusCode};
 use diesel_async::RunQueryDsl;
 use http_body_util::BodyExt;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tower::ServiceExt;
 
 use crate::common::TestApp;
@@ -21,6 +21,26 @@ fn json_get(uri: &str) -> anyhow::Result<axum::http::Request<Body>> {
         .uri(uri)
         .body(Body::empty())
         .context("Failed to build GET request")
+}
+
+fn json_post(uri: &str, body: Value) -> anyhow::Result<Request<Body>> {
+    let json_body = serde_json::to_string(&body).context("Failed to serialize request body")?;
+
+    Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("Content-Type", "application/json")
+        .body(Body::from(json_body))
+        .context("Failed to build POST request")
+}
+
+fn bearer_get(uri: &str, token: &str) -> anyhow::Result<Request<Body>> {
+    Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header("Authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .context("Failed to build authenticated GET request")
 }
 
 async fn response_json(response: axum::response::Response) -> anyhow::Result<Value> {
@@ -127,6 +147,119 @@ async fn test_list_tags_includes_inserted_data() -> anyhow::Result<()> {
         assert!(tag["public"].is_boolean(), "tag should have a public field");
         assert!(tag["created_at"].is_string(), "tag should have created_at");
     }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// list_owned_tags
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_list_owned_tags_returns_only_current_user_tags() -> anyhow::Result<()> {
+    let test_app = TestApp::new().await?;
+
+    let email = "owned_tags_user@example.com";
+    let password = "CorrectHorseBatteryStaple99!";
+
+    // Create the current user through the API.
+    let create_body = json!({
+        "name": "Owned Tags User",
+        "email": email,
+        "password": password,
+    });
+
+    let response = test_app
+        .router()
+        .oneshot(json_post("/api/v1/users", create_body)?)
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Login to get a real access token.
+    let login_body = json!({
+        "email": email,
+        "password": password,
+    });
+
+    let response = test_app
+        .router()
+        .oneshot(json_post("/api/v1/auth/login", login_body)?)
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let login_json = response_json(response).await?;
+
+    let current_user_id = login_json["user_id"]
+        .as_i64()
+        .context("user_id should be an integer")? as i32;
+
+    let access_token = login_json["access_token"]
+        .as_str()
+        .context("access_token should be a string")?
+        .to_owned();
+
+    // Insert another user and tags for both users.
+    {
+        let mut conn = test_app
+            .db_pool
+            .get()
+            .await
+            .context("Failed to get connection")?;
+
+        let other_user_id = insert_user(&mut conn).await?;
+
+        let new_tags = vec![
+            NewTag {
+                user_id: current_user_id,
+                label: "current-user-tag".to_string(),
+                public: true,
+            },
+            NewTag {
+                user_id: other_user_id,
+                label: "other-user-tag".to_string(),
+                public: false,
+            },
+        ];
+
+        diesel::insert_into(dsl::tags)
+            .values(&new_tags)
+            .execute(&mut conn)
+            .await
+            .context("Failed to insert test tags")?;
+    }
+
+    // Request only the current user's tags.
+    let response = test_app
+        .router()
+        .oneshot(bearer_get("/api/v1/users/me/tags", &access_token)?)
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let json_body = response_json(response).await?;
+    let tags = json_body["tags"]
+        .as_array()
+        .context("tags should be an array")?;
+
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0]["user_id"], current_user_id);
+    assert_eq!(tags[0]["label"], "current-user-tag");
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_list_owned_tags_without_token_returns_unauthorized() -> anyhow::Result<()> {
+    let test_app = TestApp::new().await?;
+
+    let response = test_app
+        .router()
+        .oneshot(json_get("/api/v1/users/me/tags")?)
+        .await?;
+
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
     Ok(())
 }
